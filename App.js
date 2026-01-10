@@ -32,7 +32,6 @@ import RewardsScreen from "./src/screens/RewardsScreen";
 import ResetPasswordFlow from "./src/screens/ResetPassword";
 import ContactUsScreen from "./src/screens/ContactUsScreen";
 // ---------- Context ----------
-import { CartProvider } from "./contexts/CartContext";
 import ChangePassword from "./src/screens/ChangePasswordScreen";
 import TermsOfUse from "./src/screens/TermsOfUseScreen";
 import PrivacyPolicyScreen from "./src/screens/PrivacyPolicyScreen";
@@ -42,8 +41,9 @@ import RefundPolicyScreen from "./src/screens/RefundPolicyScreen";
 import BuybackPolicyScreen from "./src/screens/BuybackPolicyScreen";
 import ExchangePolicyScreen from "./src/screens/ExchangePolicyScreen";
 import BankCashbackPolicyScreen from "./src/screens/BankCashbackPolicyScreen";
-
-
+import SubcategoryProductsScreen from "./src/screens/SubcategoryProductsScreen";
+import { CartProvider } from "./src/contexts/CartContext";
+import { WishlistProvider } from "./src/contexts/WishlistContext";
 
 // ---------- Context ----------
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
@@ -143,7 +143,7 @@ function AuthStack() {
       <Stack.Screen name="BuybackPolicy" component={BuybackPolicyScreen} />
       <Stack.Screen name="ExchangePolicy" component={ExchangePolicyScreen} />
       <Stack.Screen name="BankCashbackPolicy" component={BankCashbackPolicyScreen} />
-
+      <Stack.Screen name="SubcategoryProducts" component={SubcategoryProductsScreen} />
     </Stack.Navigator>
   );
 }
@@ -158,9 +158,13 @@ function RootNavigator() {
 export default function App() {
   return (
     <AuthProvider>
-      <NavigationContainer>
-        <RootNavigator />
-      </NavigationContainer>
+      <CartProvider>
+        <WishlistProvider>
+          <NavigationContainer>
+            <RootNavigator />
+          </NavigationContainer>
+        </WishlistProvider>
+      </CartProvider>
     </AuthProvider>
   );
 }

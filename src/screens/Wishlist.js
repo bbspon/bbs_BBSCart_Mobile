@@ -1,5 +1,5 @@
 // frontend/screens/Wishlist.js
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,50 +13,69 @@ import {
   Modal,
   ScrollView,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { useWishlist } from "../contexts/WishlistContext";
 
-const initialWishlist = [
-  {
-    id: "1",
-    name: "Samsung Galaxy S24 Ultra",
-    price: 129999,
-    oldPrice: 139999,
-    image:
-      "https://p.kindpng.com/picc/s/12-126796_phone-s5-hd-png-download.png",
-    inStock: true,
-    note: "",
-    alert: false,
-  },
-  {
-    id: "2",
-    name: "Nike Air Zoom Pegasus",
-    price: 7999,
-    oldPrice: 9999,
-    image:
-      "https://freepngimg.com/download/running_shoes/15-nike-running-shoes-png-image.png",
-    inStock: false,
-    note: "",
-    alert: false,
-  },
-  {
-    id: "3",
-    name: "Sony WH-1000XM5 Headphones",
-    price: 29990,
-    oldPrice: 34990,
-    image:
-      "https://m.media-amazon.com/images/I/61l+sz394PL._SL1000_.jpg",
-    inStock: true,
-    note: "",
-    alert: false,
-  },
-];
+const IMAGE_BASE = "https://bbscart.com/uploads/";
 
 export default function Wishlist({ navigation }) {
-  const [wishlist, setWishlist] = useState(initialWishlist);
+  // 🔹 API BACKED WISHLIST
+  const {
+    items: apiWishlist,
+    removeFromWishlist,
+    fetchWishlist,
+  } = useWishlist();
+
+  // 🔹 LOCAL UI STATE (unchanged functionality)
+  const [wishlist, setWishlist] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [selectMode, setSelectMode] = useState(false);
   const [compareVisible, setCompareVisible] = useState(false);
 
-  // --- ACTIONS ---
+  // Helper function to get image URL (consistent with SubcategoryProductsScreen)
+  const getImageUrl = (product) => {
+    if (product.product_img_url) return product.product_img_url;
+    if (product.product_img) return IMAGE_BASE + product.product_img;
+    if (product.image) return product.image;
+    return "https://via.placeholder.com/300";
+  };
+
+  // Refresh wishlist when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchWishlist();
+    }, [fetchWishlist])
+  );
+
+  // 🔹 SYNC API → UI MODEL
+  useEffect(() => {
+    if (Array.isArray(apiWishlist) && apiWishlist.length > 0) {
+      const mapped = apiWishlist
+        .map((item) => {
+          // Handle both structures: { product: {...} } or direct product object
+          const product = item.product || item;
+          if (!product || !product._id) return null;
+
+          return {
+            id: product._id,
+            name: product.name || "Unknown Product",
+            price: product.price || 0,
+            oldPrice: product.oldPrice || product.mrp || null,
+            image: getImageUrl(product),
+            inStock: (product.stock ?? 0) > 0,
+            note: "",
+            alert: false,
+          };
+        })
+        .filter(Boolean); // Remove any null entries
+      setWishlist(mapped);
+    } else {
+      // Clear wishlist if empty or invalid
+      setWishlist([]);
+    }
+  }, [apiWishlist]);
+
+  // --- ACTIONS (UNCHANGED BEHAVIOR) ---
   const toggleSelect = (id) => {
     const updated = new Set(selectedIds);
     updated.has(id) ? updated.delete(id) : updated.add(id);
@@ -65,18 +84,18 @@ export default function Wishlist({ navigation }) {
 
   const bulkRemove = () => {
     if (selectedIds.size === 0) return;
-    setWishlist((prev) => prev.filter((i) => !selectedIds.has(i.id)));
+    selectedIds.forEach((id) => removeFromWishlist(id));
     setSelectedIds(new Set());
     setSelectMode(false);
   };
 
   const moveToCart = (item) => {
     Alert.alert("Moved to Cart", `${item.name} has been added to your cart.`);
-    setWishlist((prev) => prev.filter((i) => i.id !== item.id));
+    removeFromWishlist(item.id);
   };
 
   const goToProductDetail = (item) => {
-    navigation.navigate("ProductDetail", { product: item });
+    navigation.navigate("ProductDetails", { productId: item.id });
   };
 
   const toggleAlert = (id) => {
@@ -102,7 +121,7 @@ export default function Wishlist({ navigation }) {
     }
   };
 
-  // --- RENDER ---
+  // --- RENDER ITEM (UI UNCHANGED) ---
   const renderItem = ({ item }) => {
     const selected = selectedIds.has(item.id);
     const discount =
@@ -124,7 +143,12 @@ export default function Wishlist({ navigation }) {
           toggleSelect(item.id);
         }}
       >
-        <Image source={{ uri: item.image }} style={styles.image} />
+        <Image 
+          source={{ uri: item.image || "https://via.placeholder.com/300" }} 
+          style={styles.image}
+          defaultSource={{ uri: "https://via.placeholder.com/300" }}
+        />
+
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={2}>
             {item.name}
@@ -144,14 +168,12 @@ export default function Wishlist({ navigation }) {
             {item.inStock ? "In stock" : "Out of stock"}
           </Text>
 
-          {/* Wishlist alerts */}
           <TouchableOpacity onPress={() => toggleAlert(item.id)}>
             <Text style={{ fontSize: 12, color: item.alert ? "red" : "#2874F0" }}>
               {item.alert ? "Alert Set ✓" : "Set Price/Stock Alert"}
             </Text>
           </TouchableOpacity>
 
-          {/* User notes */}
           <TextInput
             placeholder="Add a note..."
             value={item.note}
@@ -159,16 +181,16 @@ export default function Wishlist({ navigation }) {
             style={styles.note}
           />
 
-          {/* Actions */}
           <View style={styles.actions}>
-            <TouchableOpacity style={styles.cartBtn} onPress={() => moveToCart(item)}>
+            <TouchableOpacity
+              style={styles.cartBtn}
+              onPress={() => moveToCart(item)}
+            >
               <Text style={styles.cartBtnText}>Move to Cart</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.removeBtn}
-              onPress={() =>
-                setWishlist((prev) => prev.filter((i) => i.id !== item.id))
-              }
+              onPress={() => removeFromWishlist(item.id)}
             >
               <Text style={styles.removeBtnText}>Remove</Text>
             </TouchableOpacity>
@@ -188,7 +210,6 @@ export default function Wishlist({ navigation }) {
         </View>
       ) : (
         <>
-          {/* Bulk bar */}
           {selectMode && (
             <View style={styles.bulkBar}>
               <Text style={styles.bulkText}>{selectedIds.size} selected</Text>
@@ -199,16 +220,20 @@ export default function Wishlist({ navigation }) {
                 >
                   <Text style={{ color: "white" }}>Compare</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.bulkRemoveBtn} onPress={bulkRemove}>
+                <TouchableOpacity
+                  style={styles.bulkRemoveBtn}
+                  onPress={bulkRemove}
+                >
                   <Text style={{ color: "white" }}>Remove</Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          {/* Share Button */}
           <TouchableOpacity style={styles.shareBtn} onPress={shareWishlist}>
-            <Text style={{ color: "#2874F0", fontWeight: "500" }}>📤 Share Wishlist</Text>
+            <Text style={{ color: "#2874F0", fontWeight: "500" }}>
+              📤 Share Wishlist
+            </Text>
           </TouchableOpacity>
 
           <FlatList
@@ -218,23 +243,6 @@ export default function Wishlist({ navigation }) {
             contentContainerStyle={{ padding: 8 }}
           />
 
-          {/* Recommendations */}
-          <View style={styles.recommend}>
-            <Text style={styles.recommendTitle}>You may also like</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {[1, 2, 3].map((n) => (
-                <View key={n} style={styles.recommendCard}>
-                  <Image
-                    source={{ uri: "https://th.bing.com/th/id/R.b4a95e5342b2e8342a291c3e30f63306?rik=bRvnxONc3fcrBQ&riu=http%3a%2f%2fclipart-library.com%2fnew_gallery%2f30-301973_citi-samsung-pay-smartphone.png&ehk=Z5bHbLS4VIYGMGIbqSKt7OTGGBzRKkNozYDoitWWxuw%3d&risl=&pid=ImgRaw&r=0" }}
-                    style={{ width: 80, height: 80, borderRadius: 6 }}
-                  />
-                  <Text style={{ fontSize: 12 }}>Recommended {n}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Compare Modal */}
           <Modal visible={compareVisible} transparent>
             <View style={styles.modalOverlay}>
               <View style={styles.modalBox}>
@@ -244,8 +252,13 @@ export default function Wishlist({ navigation }) {
                 <ScrollView horizontal>
                   {selectedItems.map((i) => (
                     <View key={i.id} style={styles.compareCard}>
-                      <Image source={{ uri: i.image }} style={{ width: 80, height: 80 }} />
-                      <Text style={{ fontSize: 12, fontWeight: "bold" }}>{i.name}</Text>
+                      <Image
+                        source={{ uri: i.image }}
+                        style={{ width: 80, height: 80 }}
+                      />
+                      <Text style={{ fontSize: 12, fontWeight: "bold" }}>
+                        {i.name}
+                      </Text>
                       <Text style={{ fontSize: 12 }}>₹{i.price}</Text>
                     </View>
                   ))}
@@ -265,7 +278,7 @@ export default function Wishlist({ navigation }) {
   );
 }
 
-// --- STYLES (Flipkart Style) ---
+// --- STYLES (UNCHANGED) ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f1f3f6" },
   card: {
@@ -277,7 +290,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   image: { width: 90, height: 90, resizeMode: "contain" },
-  info: { flex: 1, marginLeft: 12, justifyContent: "flex-start" },
+  info: { flex: 1, marginLeft: 12 },
   name: { fontSize: 14, color: "#212121", marginBottom: 4 },
   priceRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
   price: { fontSize: 15, fontWeight: "bold", color: "#212121" },
@@ -303,7 +316,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", marginTop: 6 },
   cartBtn: { marginRight: 20 },
   cartBtnText: { color: "#2874F0", fontSize: 13, fontWeight: "500" },
-  removeBtn: {},
   removeBtnText: { fontSize: 13, color: "#d32f2f", fontWeight: "500" },
   empty: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { fontSize: 16, color: "#777" },
@@ -315,7 +327,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: "#ddd",
   },
-  bulkText: { color: "#212121", fontSize: 14 },
+  bulkText: { fontSize: 14 },
   bulkRemoveBtn: {
     backgroundColor: "#d32f2f",
     paddingHorizontal: 12,
@@ -329,16 +341,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: "#ddd",
-  },
-  recommend: { backgroundColor: "#fff", padding: 10, marginTop: 8 },
-  recommendTitle: { fontSize: 14, fontWeight: "500", marginBottom: 6 },
-  recommendCard: {
-    backgroundColor: "#fafafa",
-    padding: 6,
-    borderWidth: 1,
-    borderColor: "#eee",
-    marginRight: 8,
-    alignItems: "center",
   },
   modalOverlay: {
     flex: 1,

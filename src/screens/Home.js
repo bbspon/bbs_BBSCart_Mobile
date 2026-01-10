@@ -16,7 +16,8 @@ import {
 const { width } = Dimensions.get('window');
 import BBSCARTLOGO from "../assets/images/bbscart-logo.png";
 import CategoryMenu from './CategoryMenu';
-// ------------------------------
+import DeliverToModal from '../screens/DeliverToModal';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 // Mock Data
 // ------------------------------
 const BANNERS = [
@@ -91,17 +92,22 @@ const useMidnightCountdown = () => {
 // ------------------------------
 // Header
 // ------------------------------
-const Header = ({ onSearchPress, onCartPress, onNotifPress }) => {
+const Header = ({ onSearchPress, onMenuPress }) => {
+
   return (
     <View style={styles.container}>
       {/* Left / Search Bar */}
+      {/* MENU ICON */}
+
       <TouchableOpacity style={styles.searchBar} onPress={onSearchPress} activeOpacity={0.8}>
         <Text style={styles.searchPlaceholder}>Search products, brands…</Text>
       </TouchableOpacity>
-
+      <TouchableOpacity style={styles.menuBtn} onPress={onMenuPress}>
+        <Text style={styles.menuIcon}>☰</Text>
+      </TouchableOpacity>
       {/* Right / Logo / Icons */}
       <View style={styles.headerRight}>
-        <CategoryMenu/>
+
         <Image source={BBSCARTLOGO} style={styles.logo} />
         <Image source={BBSCARTLOGO} style={styles.logo} />
       </View>
@@ -185,7 +191,7 @@ const CategoryStrip = ({ categories, onPress }) => (
       )}
       horizontal
       showsHorizontalScrollIndicator={false}
-      
+
     />
   </View>
 );
@@ -249,10 +255,10 @@ const TrustStrip = ({ navigation }) => (
   <View style={styles.trust}>
     <TrustItem emoji="🔒" text="Dashboard" onPress={() => navigation.navigate('Dashboard')} />
     <TrustItem emoji="🚚" text="Secure Payments" onPress={() => navigation.navigate('Payments')} />
-  <TrustItem
-   emoji="🙎🏻‍♂️"
-   text="User Account" onPress={() => navigation.navigate('UserAccount')}
- />
+    <TrustItem
+      emoji="🙎🏻‍♂️"
+      text="User Account" onPress={() => navigation.navigate('UserAccount')}
+    />
     <TrustItem emoji="⚙️" text="Setting" onPress={() => navigation.navigate('Settings')} />
   </View>
 );
@@ -264,8 +270,19 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [categoryVisible, setCategoryVisible] = useState(false);
+  const [showDeliverTo, setShowDeliverTo] = useState(false);
 
   const countdown = useMidnightCountdown();
+  const openCategoryMenu = () => {
+    console.log("☰ MENU CLICKED");
+    setCategoryVisible(true);
+  };
+
+  const closeCategoryMenu = () => {
+    console.log("❌ MENU CLOSED");
+    setCategoryVisible(false);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -276,7 +293,11 @@ export default function HomeScreen({ navigation }) {
     }, 800);
     return () => { mounted = false; clearTimeout(id); };
   }, []);
-
+useEffect(() => {
+  AsyncStorage.getItem("deliveryPincode").then((p) => {
+    if (!p) setShowDeliverTo(true);
+  });
+}, []);
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 800);
@@ -338,9 +359,18 @@ export default function HomeScreen({ navigation }) {
       >
         <Header
           onSearchPress={() => navigate('Search')}
-          // onCartPress={() => navigate('Cart')}
-          // onNotifPress={() => navigate('Notifications')}
+          onMenuPress={openCategoryMenu}
+        // onNotifPress={() => navigate('Notifications')}
         />
+        <CategoryMenu
+          visible={categoryVisible}
+          onClose={closeCategoryMenu}
+        />
+        <DeliverToModal
+  visible={showDeliverTo}
+  onDone={() => setShowDeliverTo(false)}
+/>
+
         <HeroCarousel banners={BANNERS} onBannerPress={onBannerPress} />
         <CategoryStrip categories={CATEGORIES} onPress={(c) => navigate('Products', { name: c.name })} />
         <Section title={`Deals of the Day  ⏱  ${countdown}`} rightLabel="View all" onRightPress={() => navigate('Products')}>
@@ -362,11 +392,11 @@ export default function HomeScreen({ navigation }) {
 // Styles
 // ------------------------------
 const styles = StyleSheet.create({
-  
+
   container: { flex: 1, backgroundColor: '#0B0B0C' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   brand: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginRight: 6 },
-  searchBar: { flex: 1, backgroundColor: '#1A1B1E', borderRadius: 12, paddingHorizontal: 12, marginTop:'10', paddingVertical: 10, borderWidth: 1, borderColor: 'red' },
+  searchBar: { flex: 1, backgroundColor: '#1A1B1E', borderRadius: 12, paddingHorizontal: 12, marginTop: '10', paddingVertical: 10, borderWidth: 1, borderColor: 'red' },
   searchPlaceholder: { color: 'rgba(255,255,255,0.6)' },
   iconBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1A1B1E', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   iconTxt: { fontSize: 18 },
@@ -415,18 +445,26 @@ const styles = StyleSheet.create({
   errorText: { color: '#fff', fontSize: 14, marginBottom: 8 },
   retryBtn: { backgroundColor: '#EAB308', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 },
   retryTxt: { color: '#000', fontWeight: '700' },
-  category: { color:'#000', fontWeight: '700' },
-    logo: {
+  category: { color: '#000', fontWeight: '700' },
+  logo: {
     width: 80,
     height: 80,
     resizeMode: 'contain',
     marginLeft: 8,
   },
-    headerRight: {
+  headerRight: {
     flexDirection: 'row',
     display: 'flex',
-    justifyContent:'center',
+    justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
+  },
+  menuBtn: {
+    paddingHorizontal: 6,
+  },
+
+  menuIcon: {
+    fontSize: 26,
+    color: '#fff',
   },
 });

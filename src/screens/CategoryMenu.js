@@ -1,209 +1,239 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Modal,
-  FlatList,
-  Pressable
 } from "react-native";
+import axios from "axios";
+import { useNavigation } from "@react-navigation/native";
 
-/* ================= CATEGORY DATA ================= */
-const CATEGORY_DATA = [
-  {
-    id: "1",
-    name: "Beauty & Hygiene",
-    sub: [
-      {
-        id: "1-1",
-        name: "Bathroom & Cleaning",
-        mini: ["Bathroom", "Bathroom Accessories", "Bath Cloth", "Garden Care"]
-      }
-    ]
-  },
-  {
-    id: "2",
-    name: "Cleaning & Household",
-    sub: [
-      {
-        id: "2-1",
-        name: "Home Cleaning",
-        mini: ["Floor Cleaners", "Detergents", "Fresheners"]
-      }
-    ]
-  }
-];
+const API_BASE = "https://bbscart.com/api";
 
-const CategoryMenu = () => {
-  const [visible, setVisible] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedSub, setSelectedSub] = useState(null);
+const CategoryMenu = ({ visible, onClose }) => {
+  const navigation = useNavigation();
 
-  const closeAll = () => {
-    setVisible(false);
-    setSelectedCategory(null);
-    setSelectedSub(null);
+  const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
+  const [groups, setGroups] = useState([]);
+
+  const [activeCategory, setActiveCategory] = useState(null);
+  const [activeSubcategory, setActiveSubcategory] = useState(null);
+
+  /* ---------------- FETCH CATEGORIES ---------------- */
+
+  useEffect(() => {
+    if (!visible) return;
+
+    fetchCategories();
+    resetAll(); // important
+  }, [visible]);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/categories`);
+      setCategories(res.data || []);
+    } catch (err) {
+      console.log("❌ CATEGORY API ERROR", err);
+    }
   };
 
+  /* ---------------- FETCH SUBCATEGORIES ---------------- */
+
+  const fetchSubcategories = async (categoryId) => {
+    try {
+      const res = await axios.get(
+        `${API_BASE}/subcategories?categoryId=${categoryId}`
+      );
+      setSubcategories(res.data || []);
+    } catch (err) {
+      console.log("❌ SUBCATEGORY API ERROR", err);
+    }
+  };
+
+  /* ---------------- FETCH GROUPS ---------------- */
+
+  const fetchGroups = async (subcategoryId) => {
+    try {
+      const res = await axios.get(
+        `${API_BASE}/productgroups?subcategoryId=${subcategoryId}`
+      );
+      setGroups(res.data || []);
+    } catch (err) {
+      console.log("❌ GROUP API ERROR", err);
+    }
+  };
+
+  /* ---------------- STATE RESET HELPERS ---------------- */
+
+  const resetAll = () => {
+    setActiveCategory(null);
+    setActiveSubcategory(null);
+    setSubcategories([]);
+    setGroups([]);
+  };
+
+  const resetSubAndGroups = () => {
+    setActiveSubcategory(null);
+    setSubcategories([]);
+    setGroups([]);
+  };
+
+  /* ---------------- CLOSE ---------------- */
+
+  const handleClose = () => {
+    resetAll();
+    onClose?.();
+  };
+
+  /* ---------------- UI ---------------- */
+
   return (
-    <>
-      {/* MENU ICON */}
-      <TouchableOpacity style={styles.menuBtn} onPress={() => setVisible(true)}>
-        <Text style={styles.menuIcon}>☰</Text>
-      </TouchableOpacity>
+    <Modal visible={visible} transparent animationType="fade">
+      <Pressable style={styles.backdrop} onPress={handleClose} />
 
-      {/* POPUP MODAL */}
-      <Modal
-        visible={visible}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        onRequestClose={closeAll}
+      <View style={styles.popup}>
+        <View style={styles.closeWrapper}>
+          <TouchableOpacity onPress={handleClose}>
+            <Text style={styles.closeText}>×</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.columns}>
+          {/* CATEGORY */}
+          <View style={styles.column}>
+            <Text style={styles.title}>Category</Text>
+            <ScrollView>
+              {categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat._id}
+                  style={[
+                    styles.item,
+                    activeCategory === cat._id && styles.activeItem,
+                  ]}
+                  onPress={() => {
+                    if (activeCategory === cat._id) return;
+
+                    setActiveCategory(cat._id);
+                    resetSubAndGroups();
+                    fetchSubcategories(cat._id);
+                  }}
+                >
+                  <Text>{cat.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* SUBCATEGORY */}
+      <View style={styles.column}>
+  <Text style={styles.title}>Subcategory</Text>
+  <ScrollView>
+    {subcategories.map((sub) => (
+      <TouchableOpacity
+        key={sub._id}
+        style={[
+          styles.item,
+          activeSubcategory === sub._id && styles.activeItem,
+        ]}
+        onPress={() => {
+          if (activeSubcategory === sub._id) return;
+
+          setActiveSubcategory(sub._id);
+
+          // ✅ CLOSE POPUP
+          handleClose();
+
+          // ✅ NAVIGATE LIKE WEBSITE
+          navigation.navigate("SubcategoryProducts", {
+            subcategoryId: sub._id,
+            title: sub.name,
+          });
+        }}
       >
-        {/* Backdrop (full screen click-to-close) */}
-        <Pressable style={styles.backdrop} onPress={closeAll} />
+        <Text>{sub.name}</Text>
+      </TouchableOpacity>
+    ))}
+  </ScrollView>
+</View>
 
-        {/* Popup container (does NOT behave like drawer) */}
-        <View style={styles.popupHost} pointerEvents="box-none">
-          <View style={styles.popup}>
-            {/* HEADER */}
-            <View style={styles.header}>
-              <TouchableOpacity
-                onPress={() => {
-                  if (selectedSub) setSelectedSub(null);
-                  else if (selectedCategory) setSelectedCategory(null);
-                  else closeAll();
-                }}
-              >
-                <Text style={styles.back}>⮜</Text>
-              </TouchableOpacity>
 
-              <Text style={styles.title}>
-                {selectedSub
-                  ? "Mini Categories"
-                  : selectedCategory
-                  ? "Sub Categories"
-                  : "Categories"}
-              </Text>
-            </View>
-
-            {/* CATEGORY */}
-            {!selectedCategory && (
-              <FlatList
-                data={CATEGORY_DATA}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.item}
-                    onPress={() => setSelectedCategory(item)}
-                  >
-                    <Text>{item.name}</Text>
-                  </TouchableOpacity>
-                )}
-              />
-            )}
-
-            {/* SUB CATEGORY */}
-            {selectedCategory && !selectedSub && (
-              <FlatList
-                data={selectedCategory.sub}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.item}
-                    onPress={() => setSelectedSub(item)}
-                  >
-                    <Text>{item.name}</Text>
-                  </TouchableOpacity>
-                )}
-              />
-            )}
-
-            {/* MINI SUB */}
-            {selectedSub && (
-              <FlatList
-                data={selectedSub.mini}
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.item}
-                    onPress={() => {
-                      console.log("Selected:", item);
-                      closeAll();
-                    }}
-                  >
-                    <Text>{item}</Text>
-                  </TouchableOpacity>
-                )}
-              />
-            )}
+          {/* GROUPS */}
+          <View style={styles.column}>
+            <Text style={styles.title}>Groups</Text>
+            <ScrollView>
+              {groups.map((grp) => (
+                <TouchableOpacity
+                  key={grp._id}
+                  style={styles.item}
+                  onPress={() => {
+                    handleClose();
+                    navigation.navigate("ProductListing", {
+                      groupId: grp._id,
+                      title: grp.label,
+                    });
+                  }}
+                >
+                  <Text>{grp.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </View>
-      </Modal>
-    </>
+      </View>
+    </Modal>
   );
 };
 
 export default CategoryMenu;
 
-/* ================= STYLES ================= */
-const styles = StyleSheet.create({
-  menuBtn: {
-    paddingRight: 10
-  },
-  menuIcon: {
-    fontSize: 26,
-    color: "white"
-  },
+/* ---------------- STYLES (UNCHANGED) ---------------- */
 
-  // Full screen backdrop behind popup
+const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.4)"
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
-
-  // Host that positions the popup like a dropdown
-  popupHost: {
-    position: "absolute",
-    top: 120, // below your header (adjust if needed)
-    left: 16,
-    right: 16,
-    alignItems: "flex-start"
-  },
-
-  // Actual popup box
   popup: {
-    width: "80%",
-    maxHeight: 320, // fixed popup height (not full screen)
+    position: "absolute",
+    top: 120,
+    left: 10,
+    right: 10,
+    height: 360,
     backgroundColor: "#fff",
-    borderRadius: 10,
-    paddingTop: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 12
+    borderRadius: 12,
+    padding: 10,
+    elevation: 12,
   },
-
-  header: {
+  closeWrapper: {
+    alignItems: "flex-end",
+  },
+  closeText: {
+    fontSize: 28,
+    fontWeight: "bold",
+  },
+  columns: {
     flexDirection: "row",
-    alignItems: "center",
-    padding: 15,
-    borderBottomWidth: 1,
-    borderColor: "#ddd"
+    flex: 1,
   },
-  back: {
-    fontSize: 22,
-    marginRight: 15
+  column: {
+    flex: 1,
+    padding: 6,
+    borderRightWidth: 1,
+    borderRightColor: "#eee",
   },
   title: {
-    fontSize: 18,
-    fontWeight: "bold"
+    fontWeight: "bold",
+    marginBottom: 8,
   },
   item: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderColor: "#eee"
-  }
+    paddingVertical: 10,
+  },
+  activeItem: {
+    backgroundColor: "#ffe7b3",
+    borderRadius: 6,
+  },
 });
