@@ -18,6 +18,7 @@ import { useWishlist } from "../contexts/WishlistContext";
 
 const API_BASE = "https://bbscart.com/api";
 const IMAGE_BASE = "https://bbscart.com/uploads/";
+const STATIC_PREFIXES = ["/uploads", "/uploads-bbscart"]; // Support both roots
 
 export default function SubcategoryProductsScreen({ route, navigation }) {
   const { subcategoryId, title } = route.params;
@@ -58,11 +59,56 @@ export default function SubcategoryProductsScreen({ route, navigation }) {
     }
   };
 
+  // Helper functions to normalize product images (align with Home.js)
+  const norm = (u) => {
+    if (!u) return "";
+    const s = String(u).trim();
+    // Absolute URLs as-is
+    if (/^https?:\/\//i.test(s)) return s;
+
+    // Server static paths: allow /uploads and /uploads-bbscart (and nested images/YYYY/MM)
+    if (STATIC_PREFIXES.some((pre) => s.startsWith(pre + "/"))) {
+      return `https://bbscart.com${s}`;
+    }
+
+    // Bare filename: fall back to the preferred products folder under /uploads
+    return `${IMAGE_BASE}${encodeURIComponent(s)}`;
+  };
+
+  const pickImage = (p) => {
+    // 1) Prefer explicit URLs
+    if (p.product_img_url) return p.product_img_url;
+    if (Array.isArray(p.gallery_img_urls) && p.gallery_img_urls[0]) {
+      return p.gallery_img_urls[0];
+    }
+
+    // 2) Fallback to stored fields that might be arrays OR pipe-joined strings
+    const firstSingleRaw = Array.isArray(p.product_img)
+      ? p.product_img[0]
+      : p.product_img;
+    const firstGalleryRaw = Array.isArray(p.gallery_imgs)
+      ? p.gallery_imgs[0]
+      : p.gallery_imgs;
+
+    const splitFirst = (val) => {
+      if (!val) return "";
+      const t = String(val).trim();
+      return t.includes("|")
+        ? t
+            .split("|")
+            .map((s) => s.trim())
+            .filter(Boolean)[0]
+        : t;
+    };
+
+    const chosen = splitFirst(firstSingleRaw) || splitFirst(firstGalleryRaw) || p.image || "";
+    if (!chosen) return "https://via.placeholder.com/300";
+
+    return norm(chosen);
+  };
+
   const getImageUrl = (item) => {
-    if (item.product_img_url) return item.product_img_url;
-    if (item.product_img) return IMAGE_BASE + item.product_img;
-    if (item.image) return item.image;
-    return "https://via.placeholder.com/300";
+    return pickImage(item);
   };
 
   const handleWishlistToggle = async (item, isWishlisted) => {

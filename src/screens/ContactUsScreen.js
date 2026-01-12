@@ -9,19 +9,75 @@ import {
   Linking,
   StyleSheet,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Entypo from 'react-native-vector-icons/Entypo';
+import { Alert } from 'react-native';
+import axios from 'axios';
+
+const API_BASE = 'https://bbscart.com/api';
 
 export default function ContactUsScreen() {
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    const mailUrl = `mailto:info@bbscart.com?subject=Contact from ${name}&body=${message}`;
-    Linking.openURL(mailUrl);
+  const handleSubmit = async () => {
+    if (!name.trim() || !phone.trim() || !email.trim() || !message.trim()) {
+      Alert.alert('Validation', 'Please fill in your name, phone, email, and message.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      // Send to backend API (matching website ContactPage.jsx)
+      const response = await axios.post(`${API_BASE}/contact`, {
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        subject: subject || 'general',
+        message: message.trim(),
+      }, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      // Success response
+      Alert.alert(
+        'Message sent',
+        'Thank you for contacting us. We will get back to you shortly.'
+      );
+      setName('');
+      setPhone('');
+      setEmail('');
+      setSubject('');
+      setMessage('');
+    } catch (err) {
+      console.log('Contact submit error:', err?.response?.data || err?.message || err);
+      
+      // Handle axios error response
+      if (err.response) {
+        const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Unable to submit your message. Please try again.';
+        Alert.alert('Submission failed', errorMessage);
+      } else if (err.request) {
+        Alert.alert(
+          'Network error',
+          'Unable to connect to server. Please check your internet connection and try again.'
+        );
+      } else {
+        Alert.alert(
+          'Error',
+          err?.message || 'Something went wrong while sending your message. Please try again.'
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -41,7 +97,7 @@ export default function ContactUsScreen() {
             style={styles.link}
             onPress={() => Linking.openURL('tel:+914134068916')}
           >
-            +91 4134068916
+            +91 0413 291 5916
           </Text>
         </View>
 
@@ -71,7 +127,7 @@ export default function ContactUsScreen() {
           <Entypo name="location-pin" size={40} color="red" />
           <Text style={styles.cardTitle}>Address</Text>
           <Text style={styles.address}>
-            No: 20, 100 Feet Road, Ellaipillaichavady, Puducherry – 605005
+          Floor, 1st, 5, 2nd Cross, Bharathy Street, Anna Nagar, Puducherry, 605005
           </Text>
         </View>
       </View>
@@ -87,12 +143,34 @@ export default function ContactUsScreen() {
           onChangeText={setName}
         />
         <TextInput
+          placeholder="Phone Number"
+          style={styles.input}
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
+        />
+        <TextInput
           placeholder="Your Email"
           style={styles.input}
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
         />
+
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={subject}
+            onValueChange={(itemValue) => setSubject(itemValue)}
+            style={styles.picker}
+          >
+            <Picker.Item label="Select Subject" value="" />
+            <Picker.Item label="General" value="general" />
+            <Picker.Item label="Order Related" value="order" />
+            <Picker.Item label="Payment or Secure Plan" value="payment" />
+            <Picker.Item label="Technical Help" value="technical" />
+          </Picker>
+        </View>
+
         <TextInput
           placeholder="Your Message"
           style={[styles.input, { height: 120, textAlignVertical: 'top' }]}
@@ -101,8 +179,14 @@ export default function ContactUsScreen() {
           multiline
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-          <Text style={styles.buttonText}>Send Message</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
+          <Text style={styles.buttonText}>
+            {submitting ? 'Sending...' : 'Send Message'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -201,6 +285,18 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     width: '100%',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    marginBottom: 12,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  picker: {
+    width: '100%',
+    height: 50,
   },
   button: {
     backgroundColor: '#2563EB',

@@ -12,7 +12,10 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
-  Linking 
+  Linking,
+  TextInput,
+  Modal,
+  ActivityIndicator
 } from 'react-native';
 const { width } = Dimensions.get('window');
 import BBSCARTLOGO from "../assets/images/bbscart-logo.png";
@@ -23,6 +26,7 @@ import axios from "axios";
 
 const API_BASE = "https://bbscart.com/api";
 const IMAGE_BASE = "https://bbscart.com/uploads/";
+const STATIC_PREFIXES = ["/uploads", "/uploads-bbscart"]; // Support both roots
 // Mock Data
 // ------------------------------
 const BANNERS = [
@@ -42,16 +46,7 @@ const CATEGORIES = [
   { id: 'c8', name: 'Health', icon: 'https://th.bing.com/th/id/R.0d12395130d7be381f5e45e82ef3cb26?rik=NJg5KIE4H8BtLQ&riu=http%3a%2f%2fwww.pngall.com%2fwp-content%2fuploads%2f2016%2f06%2fHealth-PNG-Image.png&ehk=2m2sPsS8Q00VoZpgr44hP2Rv6nEr5T%2fk7umGk4hi84Y%3d&risl=&pid=ImgRaw&r=0' },
 ];
 
-const PRODUCTS_TRENDING = Array.from({ length: 10 }).map((_, i) => ({
-  id: `t${i + 1}`,
-  title: `Trending Item ${i + 1}`,
-  price: 1999 + i * 100,
-  mrp: 2499 + i * 120,
-  rating: (3.6 + (i % 14) * 0.1).toFixed(1),
-  image: `https://picsum.photos/seed/trend${i}/400/400`,
-  badge: i % 3 === 0 ? 'Bestseller' : i % 5 === 0 ? 'Hot' : undefined,
-  lowStock: i % 7 === 0,
-}));
+// PRODUCTS_TRENDING is now fetched dynamically from API as "All Products"
 
 const PRODUCTS_DEALS = Array.from({ length: 10 }).map((_, i) => ({
   id: `d${i + 1}`,
@@ -296,6 +291,12 @@ export default function HomeScreen({ navigation }) {
   const [categoryVisible, setCategoryVisible] = useState(false);
   const [showDeliverTo, setShowDeliverTo] = useState(false);
   const [recommendedProducts, setRecommendedProducts] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimeoutRef = useRef(null);
 
   const countdown = useMidnightCountdown();
   const openCategoryMenu = () => {
@@ -324,13 +325,28 @@ useEffect(() => {
 }, []);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Fetch recommended products on refresh
-    await fetchRecommendedProducts();
+    // Fetch recommended products and all products on refresh
+    await Promise.all([fetchRecommendedProducts(), fetchAllProducts()]);
     setTimeout(() => setRefreshing(false), 800);
-  }, [fetchRecommendedProducts]);
+  }, [fetchRecommendedProducts, fetchAllProducts]);
 
   const navigate = (screen, params) => {
     if (navigation && navigation.navigate) navigation.navigate(screen, params);
+  };
+
+  const openSearchModal = () => {
+    setShowSearchModal(true);
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
+  const closeSearchModal = () => {
+    setShowSearchModal(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
   };
 
   const onBannerPress = (item) => {
@@ -344,12 +360,60 @@ useEffect(() => {
     navigate('ProductDetails', { productId });
   };
 
-  // Helper function to get image URL (consistent with SubcategoryProductsScreen)
+  // Helper function to normalize image URLs (handles various formats)
+  const norm = (u) => {
+    if (!u) return "";
+    const s = String(u).trim();
+    // Absolute URLs as-is
+    if (/^https?:\/\//i.test(s)) return s;
+    
+    // Server static paths: allow /uploads and /uploads-bbscart (and nested images/YYYY/MM)
+    if (STATIC_PREFIXES.some((pre) => s.startsWith(pre + "/"))) {
+      return `https://bbscart.com${s}`;
+    }
+    
+    // Bare filename: fall back to the preferred products folder under /uploads
+    return `${IMAGE_BASE}${encodeURIComponent(s)}`;
+  };
+
+  // Helper function to pick the best image from product (matches website implementation)
+  const pickImage = (p) => {
+    // 1) Prefer explicit, already-built URLs from backend
+    if (p.product_img_url) return p.product_img_url;
+    if (Array.isArray(p.gallery_img_urls) && p.gallery_img_urls[0]) {
+      return p.gallery_img_urls[0];
+    }
+    
+    // 2) Fallback to stored fields that might be arrays OR pipe-joined strings
+    const firstSingleRaw = Array.isArray(p.product_img)
+      ? p.product_img[0]
+      : p.product_img;
+    const firstGalleryRaw = Array.isArray(p.gallery_imgs)
+      ? p.gallery_imgs[0]
+      : p.gallery_imgs;
+    
+    // Handle pipe-joined strings like "a.webp|b.webp"
+    const splitFirst = (val) => {
+      if (!val) return "";
+      const t = String(val).trim();
+      return t.includes("|")
+        ? t
+            .split("|")
+            .map((s) => s.trim())
+            .filter(Boolean)[0]
+        : t;
+    };
+    
+    const chosen = splitFirst(firstSingleRaw) || splitFirst(firstGalleryRaw) || p.image || "";
+    if (!chosen) return "https://via.placeholder.com/300";
+    
+    // 3) Normalize into a usable URL (handles absolute, /uploads, /uploads-bbscart, bare filename)
+    return norm(chosen);
+  };
+
+  // Helper function to get image URL (uses pickImage for consistency)
   const getImageUrl = (item) => {
-    if (item.product_img_url) return item.product_img_url;
-    if (item.product_img) return IMAGE_BASE + item.product_img;
-    if (item.image) return item.image;
-    return "https://via.placeholder.com/300";
+    return pickImage(item);
   };
 
   // Map API product to ProductCard format
@@ -399,10 +463,99 @@ useEffect(() => {
     }
   }, []);
 
+  // Fetch all products from API
+  const fetchAllProducts = useCallback(async () => {
+    try {
+      const pincode = await AsyncStorage.getItem("deliveryPincode");
+      
+      if (!pincode) {
+        // If no pincode, don't fetch products
+        setAllProducts([]);
+        return;
+      }
+
+      const res = await axios.get(`${API_BASE}/products/public`, {
+        params: { 
+          pincode,
+          limit: 50, // Fetch more products for "All Products" section
+        },
+      });
+
+      const list = res.data?.products || res.data?.items || [];
+      
+      // Map API products to card format
+      const mappedProducts = list.map(mapProductToCard);
+      
+      setAllProducts(mappedProducts);
+    } catch (err) {
+      console.log("❌ ALL PRODUCTS FETCH ERROR", err.response?.data || err.message);
+      setAllProducts([]);
+    }
+  }, []);
+
+  // Search products and brands
+  const searchProducts = useCallback(async (query) => {
+    if (!query || query.trim().length === 0) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setSearching(true);
+      const pincode = await AsyncStorage.getItem("deliveryPincode");
+      
+      const res = await axios.get(`${API_BASE}/products/public`, {
+        params: { 
+          q: query.trim(),
+          pincode: pincode || undefined,
+          limit: 50,
+        },
+      });
+
+      const list = res.data?.products || res.data?.items || [];
+      const mappedProducts = list.map(mapProductToCard);
+      setSearchResults(mappedProducts);
+    } catch (err) {
+      console.log("❌ SEARCH ERROR", err.response?.data || err.message);
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  // Debounced search handler
+  const handleSearchChange = useCallback((text) => {
+    setSearchQuery(text);
+    
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Debounce search API call
+    if (text.trim().length > 0) {
+      searchTimeoutRef.current = setTimeout(() => {
+        searchProducts(text);
+      }, 500); // Wait 500ms after user stops typing
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchProducts]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Fetch recommended products on mount
   useEffect(() => {
     fetchRecommendedProducts();
-  }, [fetchRecommendedProducts]);
+    fetchAllProducts();
+  }, [fetchRecommendedProducts, fetchAllProducts]);
 
   const renderHorizontal = (data, renderCard) => (
     <FlatList
@@ -419,7 +572,7 @@ useEffect(() => {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle={Platform.OS === 'ios' ? 'dark-content' : 'light-content'} />
-        <Header onSearchPress={() => navigate('Search')} onCartPress={() => navigate('Cart')} onNotifPress={() => navigate('Cart')} />
+        <Header onSearchPress={openSearchModal} onCartPress={() => navigate('Cart')} onNotifPress={() => navigate('Cart')} />
         <View style={styles.skeletonBanner} />
         <View style={styles.skeletonRow} />
         <View style={styles.skeletonRow} />
@@ -430,7 +583,7 @@ useEffect(() => {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <Header onSearchPress={() => navigate('Search')} onCartPress={() => navigate('Cart')} onNotifPress={() => navigate('Notifications')} />
+        <Header onSearchPress={openSearchModal} onCartPress={() => navigate('Cart')} onNotifPress={() => navigate('Notifications')} />
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>Something went wrong. Please try again.</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => setError(null)}>
@@ -448,7 +601,7 @@ useEffect(() => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Header
-          onSearchPress={() => navigate('Search')}
+          onSearchPress={openSearchModal}
           onMenuPress={openCategoryMenu}
         // onNotifPress={() => navigate('Notifications')}
         />
@@ -460,8 +613,9 @@ useEffect(() => {
           visible={showDeliverTo}
           onDone={() => {
             setShowDeliverTo(false);
-            // Fetch recommended products after pincode is set
+            // Fetch recommended products and all products after pincode is set
             fetchRecommendedProducts();
+            fetchAllProducts();
           }}
         />
 
@@ -470,8 +624,22 @@ useEffect(() => {
         <Section title={`Deals of the Day  ⏱  ${countdown}`} rightLabel="View all" onRightPress={() => navigate('Products')}>
           {renderHorizontal(PRODUCTS_DEALS, (p) => <DealsCard key={p.id} item={p} onPress={onProductPress} />)}
         </Section>
-        <Section title="Trending Now" rightLabel="View all" onRightPress={() => navigate('Products')}>
-          {renderHorizontal(PRODUCTS_TRENDING, (p) => <ProductCard key={p.id} item={p} onPress={onProductPress} />)}
+        <Section 
+          title="All Products" 
+          rightLabel="View all" 
+          onRightPress={() => navigate('Products')}
+        >
+          {allProducts.length > 0 ? (
+            renderHorizontal(allProducts, (p) => (
+              <ProductCard key={p._id || p.id} item={p} onPress={onProductPress} />
+            ))
+          ) : (
+            <View style={styles.emptyRecommended}>
+              <Text style={styles.emptyText}>
+                {refreshing ? "Loading..." : "No products available. Please set your delivery pincode."}
+              </Text>
+            </View>
+          )}
         </Section>
         <Section 
           title="Recommended For You" 
@@ -492,6 +660,84 @@ useEffect(() => {
         </Section>
         <TrustStrip navigation={navigation} />
       </ScrollView>
+
+      {/* Search Modal */}
+      <Modal
+        visible={showSearchModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={closeSearchModal}
+      >
+        <SafeAreaView style={styles.searchModalContainer}>
+          <StatusBar barStyle={Platform.OS === 'ios' ? 'dark-content' : 'light-content'} />
+          {/* Search Header */}
+          <View style={styles.searchHeader}>
+            <View style={styles.searchInputContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search products, brands…"
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                autoFocus={true}
+                returnKeyType="search"
+              />
+              {searching && (
+                <ActivityIndicator size="small" color="#EAB308" style={styles.searchLoader} />
+              )}
+            </View>
+            <TouchableOpacity onPress={closeSearchModal} style={styles.searchCancelBtn}>
+              <Text style={styles.searchCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Search Results */}
+          {searchQuery.trim().length > 0 ? (
+            searching && searchResults.length === 0 ? (
+              <View style={styles.searchEmpty}>
+                <ActivityIndicator size="large" color="#EAB308" />
+                <Text style={styles.searchEmptyText}>Searching...</Text>
+              </View>
+            ) : searchResults.length > 0 ? (
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item._id || item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.searchResultItem}
+                    onPress={() => {
+                      closeSearchModal();
+                      onProductPress(item);
+                    }}
+                  >
+                    <Image source={{ uri: item.image }} style={styles.searchResultImage} />
+                    <View style={styles.searchResultInfo}>
+                      <Text style={styles.searchResultTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                      <Text style={styles.searchResultPrice}>₹{item.price}</Text>
+                      {item.badge && (
+                        <Text style={styles.searchResultBadge}>{item.badge}</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={styles.searchResultsList}
+              />
+            ) : (
+              <View style={styles.searchEmpty}>
+                <Text style={styles.searchEmptyText}>No products found</Text>
+                <Text style={styles.searchEmptySubtext}>Try a different search term</Text>
+              </View>
+            )
+          ) : (
+            <View style={styles.searchEmpty}>
+              <Text style={styles.searchEmptyText}>Start typing to search...</Text>
+              <Text style={styles.searchEmptySubtext}>Search for products and brands</Text>
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -581,6 +827,106 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  // Search Modal Styles
+  searchModalContainer: {
+    flex: 1,
+    backgroundColor: '#0B0B0C',
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1B1E',
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1B1E',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    paddingVertical: 10,
+  },
+  searchLoader: {
+    marginLeft: 8,
+  },
+  searchCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  searchCancelText: {
+    color: '#EAB308',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  searchResultsList: {
+    padding: 12,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    backgroundColor: '#1A1B1E',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  searchResultImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    resizeMode: 'cover',
+    marginRight: 12,
+  },
+  searchResultInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  searchResultTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  searchResultPrice: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  searchResultBadge: {
+    color: '#fff',
+    fontSize: 10,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  searchEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  searchEmptyText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  searchEmptySubtext: {
     color: '#888',
     fontSize: 14,
     textAlign: 'center',
