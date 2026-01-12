@@ -1,5 +1,5 @@
 import React from "react";
-import { View, TouchableOpacity } from "react-native";
+import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -42,13 +42,63 @@ import BuybackPolicyScreen from "./src/screens/BuybackPolicyScreen";
 import ExchangePolicyScreen from "./src/screens/ExchangePolicyScreen";
 import BankCashbackPolicyScreen from "./src/screens/BankCashbackPolicyScreen";
 import SubcategoryProductsScreen from "./src/screens/SubcategoryProductsScreen";
-import { CartProvider } from "./src/contexts/CartContext";
-import { WishlistProvider } from "./src/contexts/WishlistContext";
+import { CartProvider, useCart } from "./src/contexts/CartContext";
+import { WishlistProvider, useWishlist } from "./src/contexts/WishlistContext";
 
 // ---------- Context ----------
 import { AuthProvider, useAuth } from "./src/contexts/AuthContext";
 
 const Stack = createNativeStackNavigator();
+
+/* ---------------- HEADER ICONS WITH COUNTS COMPONENT ---------------- */
+function HeaderIcons({ navigation }) {
+  const { totalCount } = useCart();
+  const { items: wishlistItems } = useWishlist();
+  const wishlistCount = wishlistItems?.length || 0;
+
+  return (
+    <View style={styles.headerIconsContainer}>
+      <TouchableOpacity
+        onPress={() => navigation.navigate("Notifications")}
+        style={styles.iconButton}
+      >
+        <Icon name="bell-outline" size={24} color="black" />
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        onPress={() => navigation.navigate("Cart")}
+        style={styles.iconButton}
+      >
+        <View style={styles.iconWrapper}>
+          <Icon name="cart-outline" size={24} color="black" />
+          {totalCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {totalCount > 99 ? "99+" : totalCount}
+              </Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => navigation.navigate("Wishlist")}
+        style={styles.iconButton}
+      >
+        <View style={styles.iconWrapper}>
+          <Icon name="heart-outline" size={24} color="black" />
+          {wishlistCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {wishlistCount > 99 ? "99+" : wishlistCount}
+              </Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 /* ---------------- AUTH STACK ---------------- */
 function AuthStack() {
@@ -80,7 +130,7 @@ function AuthStack() {
 }
 
 /* ---------------- MAIN APP STACK ---------------- */
- function MainStack() {
+function MainStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen
@@ -95,22 +145,7 @@ function AuthStack() {
             color: "black",
           },
           headerStyle: { backgroundColor: "white" },
-          headerRight: () => (
-            <View style={{ flexDirection: "row", marginRight: 10 }}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("Notifications")}
-                style={{ marginHorizontal: 8 }}
-              >
-                <Icon name="bell-outline" size={24} color="black" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("Cart")}
-                style={{ marginHorizontal: 8 }}
-              >
-                <Icon name="cart-outline" size={24} color="black" />
-              </TouchableOpacity>
-            </View>
-          ),
+          headerRight: () => <HeaderIcons navigation={navigation} />,
         })}
       />
       <Stack.Screen name="Dashboard" component={Dashboard} />
@@ -168,3 +203,53 @@ export default function App() {
     </AuthProvider>
   );
 }
+
+/* ---------------- STYLES ---------------- */
+const styles = StyleSheet.create({
+  headerIconsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 10,
+    overflow: "visible",
+  },
+  iconButton: {
+    marginHorizontal: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconWrapper: {
+    width: 30,
+    height: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  badge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#ff4444",
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: "white",
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+  },
+  badgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "bold",
+    textAlign: "center",
+    includeFontPadding: false,
+    lineHeight: 14,
+  },
+});

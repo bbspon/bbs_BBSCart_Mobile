@@ -12,12 +12,17 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  Linking 
 } from 'react-native';
 const { width } = Dimensions.get('window');
 import BBSCARTLOGO from "../assets/images/bbscart-logo.png";
 import CategoryMenu from './CategoryMenu';
 import DeliverToModal from '../screens/DeliverToModal';
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+
+const API_BASE = "https://bbscart.com/api";
+const IMAGE_BASE = "https://bbscart.com/uploads/";
 // Mock Data
 // ------------------------------
 const BANNERS = [
@@ -58,14 +63,7 @@ const PRODUCTS_DEALS = Array.from({ length: 10 }).map((_, i) => ({
   discountPct: 20 + (i % 6) * 5,
 }));
 
-const PRODUCTS_RECO = Array.from({ length: 12 }).map((_, i) => ({
-  id: `r${i + 1}`,
-  title: `Recommended ${i + 1}`,
-  price: 1499 + i * 70,
-  mrp: 1999 + i * 90,
-  rating: (3.9 + (i % 8) * 0.1).toFixed(1),
-  image: `https://picsum.photos/seed/reco${i}/400/400`,
-}));
+// PRODUCTS_RECO is now fetched dynamically from API
 
 // ------------------------------
 // Utility: Countdown to Midnight
@@ -108,9 +106,34 @@ const Header = ({ onSearchPress, onMenuPress }) => {
       {/* Right / Logo / Icons */}
       <View style={styles.headerRight}>
 
-        <Image source={BBSCARTLOGO} style={styles.logo} />
-        <Image source={BBSCARTLOGO} style={styles.logo} />
-      </View>
+{/* Thiaworld Jewellery */}
+<TouchableOpacity
+  onPress={() => Linking.openURL("https://thiaworld.bbscart.com/")}
+  activeOpacity={0.8}
+  style={styles.linkBox}
+>
+  <Image
+    source={require("../assets/images/thiaworld.png")}
+    style={styles.logo}
+    resizeMode="contain"
+  />
+</TouchableOpacity>
+
+{/* BBS Global Health Access */}
+<TouchableOpacity
+  onPress={() => Linking.openURL("https://healthcare.bbscart.com/")}
+  activeOpacity={0.8}
+  style={styles.linkBox}
+>
+  <Image
+    source={require("../assets/images/bbs-health.png")}
+    style={styles.logo}
+    resizeMode="contain"
+  />
+</TouchableOpacity>
+
+</View>
+
     </View>
   );
 };
@@ -272,6 +295,7 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [categoryVisible, setCategoryVisible] = useState(false);
   const [showDeliverTo, setShowDeliverTo] = useState(false);
+  const [recommendedProducts, setRecommendedProducts] = useState([]);
 
   const countdown = useMidnightCountdown();
   const openCategoryMenu = () => {
@@ -298,10 +322,12 @@ useEffect(() => {
     if (!p) setShowDeliverTo(true);
   });
 }, []);
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    // Fetch recommended products on refresh
+    await fetchRecommendedProducts();
     setTimeout(() => setRefreshing(false), 800);
-  }, []);
+  }, [fetchRecommendedProducts]);
 
   const navigate = (screen, params) => {
     if (navigation && navigation.navigate) navigation.navigate(screen, params);
@@ -312,12 +338,76 @@ useEffect(() => {
     if (type === 'Category') navigate('Category', { name });
   };
 
-  const onProductPress = (item) => navigate('ProductDetails', { id: item.id });
+  const onProductPress = (item) => {
+    // Handle both API products (_id) and mock products (id)
+    const productId = item._id || item.id;
+    navigate('ProductDetails', { productId });
+  };
+
+  // Helper function to get image URL (consistent with SubcategoryProductsScreen)
+  const getImageUrl = (item) => {
+    if (item.product_img_url) return item.product_img_url;
+    if (item.product_img) return IMAGE_BASE + item.product_img;
+    if (item.image) return item.image;
+    return "https://via.placeholder.com/300";
+  };
+
+  // Map API product to ProductCard format
+  const mapProductToCard = (product) => {
+    return {
+      id: product._id || product.id,
+      _id: product._id,
+      title: product.name || product.title || "Unknown Product",
+      price: product.price || 0,
+      mrp: product.mrp || product.oldPrice || null,
+      rating: product.rating || product.avgRating || product.reviews_avg || "0.0",
+      image: getImageUrl(product),
+      badge: product.badge || undefined,
+      lowStock: (product.stock ?? 0) <= 5 && (product.stock ?? 0) > 0,
+    };
+  };
+
+  // Fetch recommended products from API
+  const fetchRecommendedProducts = useCallback(async () => {
+    try {
+      const pincode = await AsyncStorage.getItem("deliveryPincode");
+      
+      if (!pincode) {
+        // If no pincode, don't fetch products
+        setRecommendedProducts([]);
+        return;
+      }
+
+      const res = await axios.get(`${API_BASE}/products/public`, {
+        params: { 
+          pincode,
+          limit: 12, // Limit to 12 products for recommended section
+        },
+      });
+
+      const list = res.data?.products || res.data?.items || [];
+      
+      // Map API products to card format
+      const mappedProducts = list
+        .slice(0, 12) // Ensure max 12 products
+        .map(mapProductToCard);
+      
+      setRecommendedProducts(mappedProducts);
+    } catch (err) {
+      console.log("❌ RECOMMENDED PRODUCTS FETCH ERROR", err.response?.data || err.message);
+      setRecommendedProducts([]);
+    }
+  }, []);
+
+  // Fetch recommended products on mount
+  useEffect(() => {
+    fetchRecommendedProducts();
+  }, [fetchRecommendedProducts]);
 
   const renderHorizontal = (data, renderCard) => (
     <FlatList
       data={data}
-      keyExtractor={(it) => it.id}
+      keyExtractor={(it) => it._id || it.id}
       renderItem={({ item }) => renderCard(item)}
       horizontal
       showsHorizontalScrollIndicator={false}
@@ -367,9 +457,13 @@ useEffect(() => {
           onClose={closeCategoryMenu}
         />
         <DeliverToModal
-  visible={showDeliverTo}
-  onDone={() => setShowDeliverTo(false)}
-/>
+          visible={showDeliverTo}
+          onDone={() => {
+            setShowDeliverTo(false);
+            // Fetch recommended products after pincode is set
+            fetchRecommendedProducts();
+          }}
+        />
 
         <HeroCarousel banners={BANNERS} onBannerPress={onBannerPress} />
         <CategoryStrip categories={CATEGORIES} onPress={(c) => navigate('Products', { name: c.name })} />
@@ -379,8 +473,22 @@ useEffect(() => {
         <Section title="Trending Now" rightLabel="View all" onRightPress={() => navigate('Products')}>
           {renderHorizontal(PRODUCTS_TRENDING, (p) => <ProductCard key={p.id} item={p} onPress={onProductPress} />)}
         </Section>
-        <Section title="Recommended For You" rightLabel="Refresh" onRightPress={() => { /* TODO */ }}>
-          {renderHorizontal(PRODUCTS_RECO, (p) => <ProductCard key={p.id} item={p} onPress={onProductPress} small />)}
+        <Section 
+          title="Recommended For You" 
+          rightLabel="Refresh" 
+          onRightPress={fetchRecommendedProducts}
+        >
+          {recommendedProducts.length > 0 ? (
+            renderHorizontal(recommendedProducts, (p) => (
+              <ProductCard key={p._id || p.id} item={p} onPress={onProductPress} small />
+            ))
+          ) : (
+            <View style={styles.emptyRecommended}>
+              <Text style={styles.emptyText}>
+                {refreshing ? "Loading..." : "No products available. Please set your delivery pincode."}
+              </Text>
+            </View>
+          )}
         </Section>
         <TrustStrip navigation={navigation} />
       </ScrollView>
@@ -466,5 +574,15 @@ const styles = StyleSheet.create({
   menuIcon: {
     fontSize: 26,
     color: '#fff',
+  },
+  emptyRecommended: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
