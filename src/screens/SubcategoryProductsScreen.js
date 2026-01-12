@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import axios from "axios";
@@ -64,6 +65,22 @@ export default function SubcategoryProductsScreen({ route, navigation }) {
     return "https://via.placeholder.com/300";
   };
 
+  const handleWishlistToggle = async (item, isWishlisted) => {
+    try {
+      const result = isWishlisted
+        ? await removeFromWishlist(item._id)
+        : await addToWishlist(item._id);
+      
+      if (result && !result.success) {
+        Alert.alert("Error", result.error || "Failed to update wishlist");
+      }
+      // If success is true, the wishlist will be automatically refreshed by fetchWishlist
+    } catch (error) {
+      Alert.alert("Error", "Failed to update wishlist. Please try again.");
+      console.log("Wishlist toggle error:", error);
+    }
+  };
+
   const renderItem = ({ item }) => {
     // Check if item is wishlisted - handle both direct product structure and nested product structure
     const isWishlisted = items.some((w) => {
@@ -76,11 +93,7 @@ export default function SubcategoryProductsScreen({ route, navigation }) {
       {/* Wishlist */}
       <TouchableOpacity
         style={styles.wishlist}
-        onPress={() =>
-          isWishlisted
-            ? removeFromWishlist(item._id)
-            : addToWishlist(item._id)
-        }
+        onPress={() => handleWishlistToggle(item, isWishlisted)}
       >
         <Icon
           name={isWishlisted ? "heart" : "heart-outline"}

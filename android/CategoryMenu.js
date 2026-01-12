@@ -73,22 +73,106 @@ const CategoryMenu = ({ visible, onClose }) => {
 
   const fetchSubcategories = async (categoryId) => {
     try {
-      if (!categoryId) return;
-  
-      const res = await axios.get(
-        `${API_BASE}/products/catalog/subcategories`,
-        {
-          params: { category_id: categoryId },
+      if (!categoryId) {
+        setSubcategories([]);
+        return;
+      }
+
+      console.log("🔍 Filtering subcategories for categoryId:", categoryId);
+      
+      // Use pre-loaded all subcategories, or try fetching if not loaded
+      let subcategoriesList = allSubcategories.length > 0 ? allSubcategories : [];
+      
+      // If we don't have all subcategories loaded, try fetching
+      if (subcategoriesList.length === 0) {
+        try {
+          const res = await axios.get(`${API_BASE}/subcategories`);
+          const data = res.data || [];
+          
+          if (Array.isArray(data)) {
+            subcategoriesList = data;
+          } else if (data.subcategories && Array.isArray(data.subcategories)) {
+            subcategoriesList = data.subcategories;
+          } else if (data.items && Array.isArray(data.items)) {
+            subcategoriesList = data.items;
+          } else if (data.data && Array.isArray(data.data)) {
+            subcategoriesList = data.data;
+          }
+          
+          setAllSubcategories(subcategoriesList);
+        } catch (fetchError) {
+          console.log("❌ Failed to fetch all subcategories:", fetchError.message);
         }
-      );
-  
-      setSubcategories(res.data.items || []);
+      }
+      
+      console.log("📋 Total subcategories available:", subcategoriesList.length);
+      
+      if (subcategoriesList.length === 0) {
+        console.log("⚠️ No subcategories loaded");
+        setSubcategories([]);
+        return;
+      }
+      
+      // Filter subcategories by categoryId - try multiple field name variations
+      const filteredSubcategories = subcategoriesList.filter((sub) => {
+        // Extract categoryId from various possible field structures
+        let subCategoryId = null;
+        
+        // Try direct fields first
+        if (sub.categoryId) subCategoryId = sub.categoryId;
+        else if (sub.category_id) subCategoryId = sub.category_id;
+        else if (sub.parentCategoryId) subCategoryId = sub.parentCategoryId;
+        else if (sub.parent_category_id) subCategoryId = sub.parent_category_id;
+        
+        // Try nested objects
+        else if (sub.category && typeof sub.category === 'object') {
+          subCategoryId = sub.category._id || sub.category.id || sub.category.categoryId;
+        }
+        else if (sub.categoryId && typeof sub.categoryId === 'object') {
+          subCategoryId = sub.categoryId._id || sub.categoryId.id;
+        }
+        // Try string category references
+        else if (sub.category && typeof sub.category === 'string') {
+          subCategoryId = sub.category;
+        }
+        
+        // Normalize both IDs to strings for comparison (handle ObjectId objects)
+        const normalizedSubCategoryId = subCategoryId?.toString();
+        const normalizedCategoryId = categoryId?.toString();
+        
+        const matches = normalizedSubCategoryId === normalizedCategoryId;
+        
+        // Log first few for debugging
+        if (subcategoriesList.indexOf(sub) < 2) {
+          console.log(`🔎 Checking "${sub.name}": subCategoryId="${normalizedSubCategoryId}", categoryId="${normalizedCategoryId}", matches=${matches}`);
+          console.log(`   Full subcategory object keys:`, Object.keys(sub));
+          if (sub.category) console.log(`   sub.category:`, sub.category);
+        }
+        
+        return matches;
+      });
+      
+      console.log("✅ Filtered subcategories for categoryId:", categoryId, "→ Found:", filteredSubcategories.length);
+      
+      if (filteredSubcategories.length === 0 && subcategoriesList.length > 0) {
+        console.log("⚠️ WARNING: No subcategories matched! Sample subcategories:");
+        subcategoriesList.slice(0, 3).forEach(sub => {
+          console.log(`   - "${sub.name}":`, {
+            categoryId: sub.categoryId,
+            category_id: sub.category_id,
+            category: sub.category,
+            parentCategoryId: sub.parentCategoryId
+          });
+        });
+      }
+      
+      setSubcategories(filteredSubcategories);
     } catch (err) {
-      console.log("❌ SUBCATEGORY API ERROR", err.response?.data || err.message);
+      console.log("❌ SUBCATEGORY FILTERING ERROR", err.response?.data || err.message);
       setSubcategories([]);
     }
   };
-  
+
   /* ---------------- FETCH GROUPS ---------------- */
 
   const fetchGroups = async (subcategoryId) => {
@@ -151,12 +235,13 @@ const CategoryMenu = ({ visible, onClose }) => {
                     activeCategory === cat._id && styles.activeItem,
                   ]}
                   onPress={() => {
+                    if (activeCategory === cat._id) return;
+
                     setActiveCategory(cat._id);
-                    setActiveSubcategory(null);
-                    setGroups([]);
+                    resetSubAndGroups();
+                    // Fetch subcategories for the selected category
                     fetchSubcategories(cat._id);
                   }}
-                  
                 >
                   <Text>{cat.name}</Text>
                 </TouchableOpacity>

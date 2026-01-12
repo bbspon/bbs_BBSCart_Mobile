@@ -6,6 +6,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { useNavigation } from '@react-navigation/native';
 import { useCart } from '../contexts/CartContext';
+import { useWishlist } from '../contexts/WishlistContext';
 
 const { width } = Dimensions.get('window');
 const ITEM_HEIGHT = 180;
@@ -124,9 +125,9 @@ const heroBannerImages = [
 
 const ProductListings = () => {
     const { addToCart } = useCart();
+    const { items: wishlistItems, addToWishlist, removeFromWishlist } = useWishlist();
     const [selectedQuantity, setSelectedQuantity] = useState({});
     const [productQuantities, setProductQuantities] = useState({});
-    const [wishlist, setWishlist] = useState({});
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -212,8 +213,20 @@ const ProductListings = () => {
         navigation.navigate('CartPage', { product });
     };
 
-    const toggleWishlist = (productId) => {
-        setWishlist((prev) => ({ ...prev, [productId]: !prev[productId] }));
+    const toggleWishlist = async (productId) => {
+        // Check if product is already in wishlist
+        // Note: ProductListings uses mock data with 'id' field, but API products use '_id'
+        // We'll need to check if the productId exists in wishlistItems
+        const isWishlisted = wishlistItems.some((item) => {
+            const wProductId = item.product?._id || item._id || item.id;
+            return wProductId === productId || wProductId?.toString() === productId?.toString();
+        });
+        
+        if (isWishlisted) {
+            await removeFromWishlist(productId);
+        } else {
+            await addToWishlist(productId);
+        }
     };
 
     const handleViewProduct = (product) => {
@@ -235,7 +248,11 @@ const ProductListings = () => {
     const renderProduct = ({ item }) => {
         const currentPriceOption = selectedQuantity[item.id] || item.priceOptions[0];
         const productQuantity = productQuantities[item.id] || 1;
-        const isWishlisted = wishlist[item.id] || false;
+        // Check if product is in wishlist - handle both API products (_id) and mock products (id)
+        const isWishlisted = wishlistItems.some((wItem) => {
+            const wProductId = wItem.product?._id || wItem._id || wItem.id;
+            return wProductId === item.id || wProductId === item._id || wProductId?.toString() === item.id?.toString();
+        });
 
         return (
             <View style={styles.productContainer}>
