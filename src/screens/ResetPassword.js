@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Image,
 } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import BBSCARTLOGO from "../assets/images/bbscart-logo.png";
 
 const Stack = createNativeStackNavigator();
 
@@ -16,14 +18,18 @@ function EmailConfirmationScreen({ navigation }) {
   const [email, setEmail] = useState("");
 
   const handleSend = () => {
-    if (!email) return Alert.alert("Error", "Please enter your email");
+    if (!email.trim()) {
+      return Alert.alert("Error", "Please enter your email");
+    }
     Alert.alert("Success", "Confirmation link/OTP sent to " + email);
     navigation.navigate("ResetPassword", { email });
   };
 
   return (
     <View style={styles.container}>
+      <Image source={BBSCARTLOGO} style={styles.logo} />
       <Text style={styles.title}>Reset Password</Text>
+
       <TextInput
         style={styles.input}
         placeholder="Enter your email"
@@ -32,12 +38,14 @@ function EmailConfirmationScreen({ navigation }) {
         keyboardType="email-address"
         autoCapitalize="none"
       />
+
       <TouchableOpacity style={styles.button} onPress={handleSend}>
         <Text style={styles.buttonText}>Send Confirmation</Text>
       </TouchableOpacity>
-       
-       <Text style={styles.links}>
-        If you remember your password !{" "}
+
+      {/* Sign In Link */}
+      <Text style={styles.links}>
+        Remember your password?{" "}
         <Text
           style={styles.link}
           onPress={() => navigation.navigate("SignIn")}
@@ -49,30 +57,33 @@ function EmailConfirmationScreen({ navigation }) {
   );
 }
 
-function ResetPasswordScreen({ route }) {
+function ResetPasswordScreen({ route, navigation }) {
   const { email } = route.params || {};
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // 👁️ visibility toggles
+  // Eye toggle states
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
   const handleReset = () => {
-    if (!newPassword || !confirmPassword)
+    if (!newPassword || !confirmPassword) {
       return Alert.alert("Error", "Please fill all fields");
-    if (newPassword !== confirmPassword)
+    }
+    if (newPassword !== confirmPassword) {
       return Alert.alert("Error", "Passwords do not match");
-    Alert.alert("Success", "Password changed for " + email);
+    }
+
+    // Navigate to SignIn after reset
+    Alert.alert("Success", "Password changed for " + email, [
+      {
+        text: "OK",
+        onPress: () => navigation.navigate("SignIn"),
+      },
+    ]);
   };
 
-  const renderPasswordInput = (
-    placeholder,
-    value,
-    setValue,
-    visible,
-    setVisible
-  ) => (
+  const renderPasswordInput = (placeholder, value, setValue, visible, setVisible) => (
     <View style={styles.passwordRow}>
       <TextInput
         style={[styles.input, { flex: 1 }]}
@@ -86,6 +97,7 @@ function ResetPasswordScreen({ route }) {
           name={visible ? "eye-off-outline" : "eye-outline"}
           size={22}
           color="#555"
+          style={styles.eyeIcon}
         />
       </TouchableOpacity>
     </View>
@@ -93,18 +105,26 @@ function ResetPasswordScreen({ route }) {
 
   return (
     <View style={styles.container}>
+      <Image source={BBSCARTLOGO} style={styles.logo} />
       <Text style={styles.title}>Create New Password</Text>
+
       {renderPasswordInput("New Password", newPassword, setNewPassword, showNewPass, setShowNewPass)}
-      {renderPasswordInput(
-        "Confirm New Password",
-        confirmPassword,
-        setConfirmPassword,
-        showConfirmPass,
-        setShowConfirmPass
-      )}
+      {renderPasswordInput("Confirm New Password", confirmPassword, setConfirmPassword, showConfirmPass, setShowConfirmPass)}
+
       <TouchableOpacity style={styles.button} onPress={handleReset}>
         <Text style={styles.buttonText}>Reset Password</Text>
       </TouchableOpacity>
+
+      {/* Sign In Link */}
+      <Text style={styles.links}>
+        Remember your password?{" "}
+        <Text
+          style={styles.link}
+          onPress={() => navigation.navigate("SignIn")}
+        >
+          Sign In
+        </Text>
+      </Text>
     </View>
   );
 }
@@ -133,11 +153,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#fff",
   },
+  logo: {
+    width: 200,
+    height: 100,
+    resizeMode: "contain",
+    alignSelf: "center",
+    marginBottom: 20,
+  },
   title: {
     fontSize: 22,
     fontWeight: "bold",
-    marginBottom: 20,
     textAlign: "center",
+    marginBottom: 20,
   },
   input: {
     borderWidth: 1,
@@ -152,9 +179,8 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   eyeBtn: {
-    marginLeft: -40, // overlaps edge of TextInput for a clean icon placement
+    marginLeft: -40,
     padding: 10,
-    marginBottom: 15,
   },
   button: {
     backgroundColor: "#007AFF",
@@ -163,15 +189,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
-  buttonText: { color: "#fff", fontWeight: "bold" },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
   links: {
     fontWeight: "600",
-    marginTop: 10,
+    marginTop: 15,
     textAlign: "center",
   },
   link: {
     color: "#007AFF",
-    marginTop: 10,
-    textAlign: "center",
+  },
+  eyeIcon: {
+    paddingBottom: 15,
+ 
   },
 });

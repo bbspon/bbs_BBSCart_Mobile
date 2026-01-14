@@ -86,6 +86,9 @@ export default function CartPage() {
           </TouchableOpacity>
         </View>
 
+      
+      </View>
+
         <View style={styles.actionRow}>
           <TouchableOpacity onPress={() => removeItem(item.productId)}>
             <Text style={styles.actionText}>REMOVE</Text>
@@ -103,7 +106,6 @@ export default function CartPage() {
             <Text style={styles.actionText}>BUY NOW</Text>
           </TouchableOpacity>
         </View>
-      </View>
     </View>
   );
 
@@ -204,6 +206,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 8,
+    flex: 1,
+    gap: 10,
   },
   actionText: { color: "#2874F0", fontSize: 13 },
   savedSection: { backgroundColor: "#fff", marginTop: 10, padding: 10 },

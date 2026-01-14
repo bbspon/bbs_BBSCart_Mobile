@@ -30,13 +30,13 @@ const IntroScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
     alignItems: 'center',
-    flex: 1,
     justifyContent: 'center',
+    marginBottom: 30,
+    flex: 0.8,
   },
   image: {
-    width: 550,
+    width: 550,   
     height: 450,
     marginBottom: 20,
   },

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import BBSCARTLOGO from '../assets/images/bbscart-logo.png';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 const Registration = () => {
   const navigation = useNavigation();
@@ -24,6 +25,8 @@ const Registration = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const validateRegister = () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Name is required');
@@ -36,9 +39,7 @@ const Registration = () => {
     if (!email.trim()) {
       Alert.alert('Error', 'Email is required');
       return false;
-    } else if (
-      !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)
-    ) {
+    } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)) {
       Alert.alert('Error', 'Enter a valid email address');
       return false;
     }
@@ -56,12 +57,12 @@ const Registration = () => {
       return false;
     } else if (
       !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/.test(
-        password
+        password,
       )
     ) {
       Alert.alert(
         'Error',
-        'Min 8 chars: uppercase, lowercase, number & special.'
+        'Min 8 chars: uppercase, lowercase, number & special.',
       );
       return false;
     }
@@ -92,16 +93,13 @@ const Registration = () => {
     try {
       setIsLoading(true);
 
-      const response = await fetch(
-        'https://bbscart.com/api/auth/register',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch('https://bbscart.com/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
 
       const data = await response.json();
 
@@ -174,25 +172,53 @@ const Registration = () => {
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            placeholder="Create a password"
-            value={password}
-            onChangeText={setPassword}
-            style={styles.input}
-            secureTextEntry
-          />
+
+          <View style={styles.passwordContainer}>
+            <TextInput
+              placeholder="Create a password"
+              value={password}
+              onChangeText={setPassword}
+              style={styles.passwordInput}
+              secureTextEntry={!showPassword} // 👈 logic
+            />
+
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeIcon}
+            >
+              <Icon
+                name={showPassword ? 'eye-off' : 'eye'}
+                size={18}
+                color="#666"
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Confirm Password</Text>
-          <TextInput
-            placeholder="Confirm your password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            style={styles.input}
-            secureTextEntry
-          />
-        </View>
+ <View style={styles.inputGroup}>
+      <Text style={styles.label}>Confirm Password</Text>
+
+      <View style={styles.passwordContainer}>
+        <TextInput
+          placeholder="Confirm your password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          style={styles.confirmPasswordInput}
+          secureTextEntry={!showConfirmPassword}
+        />
+
+        <TouchableOpacity
+          onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+          style={styles.eyeIcon}
+        >
+          <Icon
+                name={showPassword ? 'eye-off' : 'eye'}
+                size={18}
+                color="#666"
+              />
+        </TouchableOpacity>
+      </View>
+    </View>
 
         <TouchableOpacity style={styles.button} onPress={handleRegister}>
           <Text style={styles.buttonText}>Create Account</Text>
@@ -223,6 +249,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: '#f1f3f6',
     padding: 20,
+    margin: 20,
     justifyContent: 'center',
   },
   header: {
@@ -303,6 +330,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 12,
+  },
+  eyeIcon: {
+    padding: 6,
+  },
+    confirmPasswordInput: {
+    flex: 1,
+    paddingVertical: 12,
   },
 });
 
