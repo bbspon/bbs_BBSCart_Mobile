@@ -23,7 +23,7 @@ import CategoryMenu from './CategoryMenu';
 import DeliverToModal from '../screens/DeliverToModal';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-
+import Icon from 'react-native-vector-icons/Ionicons';
 const API_BASE = "https://bbscart.com/api";
 const IMAGE_BASE = "https://bbscart.com/uploads/";
 const STATIC_PREFIXES = ["/uploads", "/uploads-bbscart"]; // Support both roots
@@ -92,12 +92,21 @@ const Header = ({ onSearchPress, onMenuPress }) => {
       {/* Left / Search Bar */}
       {/* MENU ICON */}
 
-      <TouchableOpacity style={styles.searchBar} onPress={onSearchPress} activeOpacity={0.8}>
-        <Text style={styles.searchPlaceholder}>Search products, brands…</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.menuBtn} onPress={onMenuPress}>
-        <Text style={styles.menuIcon}>☰</Text>
-      </TouchableOpacity>
+   
+<View style={styles.headerRow}>
+  <TouchableOpacity style={styles.menuBtn} onPress={onMenuPress}>
+     <Icon name="menu-outline" size={45} color="#f1eeee" />
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={styles.searchBar}
+    onPress={onSearchPress}
+    activeOpacity={0.8}
+  >
+    <Text style={styles.searchPlaceholder}>Search products, brands…</Text>
+  </TouchableOpacity>
+</View>
+
       {/* Right / Logo / Icons */}
       <View style={styles.headerRight}>
 
@@ -747,11 +756,51 @@ useEffect(() => {
 // ------------------------------
 const styles = StyleSheet.create({
 
+ headerRow: {
+    flexDirection: "row",
+    alignItems: "center",          // vertical center
+    justifyContent: "space-between", // space between menu & search
+    paddingHorizontal: 12,
+    paddingVertical: 18,
+    backgroundColor: "#1c1c1c",     // optional (header bg)
+  },
+
+  menuBtn: {
+    width: 45,
+    height: 45,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  searchBar: {
+    flex: 1,                        // take remaining space
+    marginLeft: 12,                 // gap from menu icon
+    height: 42,
+    backgroundColor: "#ffffff",
+    borderRadius: 8,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+
+  searchPlaceholder: {
+    color: "#999",
+    fontSize: 14,
+  },
+
+
+menuIcon: {
+  fontSize: 48,
+  color: "#000",
+},
+
+
+
+
   container: { flex: 1, backgroundColor: '#0B0B0C' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   brand: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginRight: 6 },
-  searchBar: { flex: 1, backgroundColor: '#1A1B1E', borderRadius: 12, paddingHorizontal: 12, marginTop: '10', paddingVertical: 10, borderWidth: 1, borderColor: 'red' },
-  searchPlaceholder: { color: 'rgba(255,255,255,0.6)' },
+
+
   iconBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1A1B1E', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   iconTxt: { fontSize: 18 },
   badge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#FF4D4F', minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
@@ -801,10 +850,11 @@ const styles = StyleSheet.create({
   retryTxt: { color: '#000', fontWeight: '700' },
   category: { color: '#000', fontWeight: '700' },
   logo: {
-    width: 80,
+    width: 180,
     height: 80,
     resizeMode: 'contain',
     marginLeft: 8,
+    paddingBottom: 16,
   },
   headerRight: {
     flexDirection: 'row',
@@ -812,10 +862,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
+    marginTop: -10,
+    marginBottom: 10,
   },
-  menuBtn: {
-    paddingHorizontal: 6,
-  },
+
 
   menuIcon: {
     fontSize: 26,

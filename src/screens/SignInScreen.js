@@ -13,7 +13,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import BBSCARTLOGO from "../assets/images/bbscart-logo.png";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import Icon from 'react-native-vector-icons/Ionicons';
 const SignInScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -23,6 +23,8 @@ const SignInScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
 
   const { login } = useAuth();
+
+ const [showPassword, setShowPassword] = useState(false);
 
   const validateLogin = () => {
     if (!email.trim()) {
@@ -142,17 +144,31 @@ const SignInScreen = ({ navigation }) => {
           autoCapitalize="none"
         />
       </View>
+<View style={styles.inputGroup}>
+  <Text style={styles.label}>Password</Text>
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          placeholder="Enter password"
-          value={password}
-          onChangeText={setPassword}
-          style={styles.input}
-          secureTextEntry
-        />
-      </View>
+  <View style={styles.passwordContainer}>
+    <TextInput
+      placeholder="Enter password"
+      value={password}
+      onChangeText={setPassword}
+      style={styles.passwordInput}
+      secureTextEntry={!showPassword}
+    />
+
+    <TouchableOpacity
+      onPress={() => setShowPassword(!showPassword)}
+      style={styles.eyeIcon}
+    >
+      <Icon
+        name={showPassword ? 'eye' : 'eye-off'}
+        size={22}
+        color="#666"
+      />
+    </TouchableOpacity>
+  </View>
+</View>
+
 
       <Text style={styles.orText}>OR</Text>
 
@@ -205,7 +221,7 @@ const SignInScreen = ({ navigation }) => {
         Forgot your password?{" "}
         <Text
           style={styles.link}
-          onPress={() => navigation.navigate("ResetPassword")}
+          onPress={() => navigation.navigate("ResetPasswordFlow")}
         >
           Reset Password
         </Text>
@@ -215,15 +231,90 @@ const SignInScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFF", paddingHorizontal: 25, paddingTop: 40 },
-  header: { alignItems: "center", marginBottom: 25 },
-  logo: { width: 100, height: 100, resizeMode: "contain", marginBottom: 15 },
-  title: { fontSize: 26, fontWeight: "bold", textAlign: "center", color: "#022D36", marginBottom: 6 },
-  subtitle: { fontSize: 15, textAlign: "center", color: "#666", marginBottom: 20 },
-  inputGroup: { marginBottom: 18 },
-  label: { fontSize: 14, color: "#333", marginBottom: 6, fontWeight: "500" },
-  input: { borderWidth: 1, borderColor: "#ccc", backgroundColor: "#FAFAFA", padding: 14, borderRadius: 10, fontSize: 15 },
-  orText: { textAlign: "center", color: "#888", marginVertical: 15, fontSize: 14, fontWeight: "500" },
+  /* ===== CONTAINER ===== */
+  container: {
+    flex: 1,
+    backgroundColor: "#FFF",
+    paddingHorizontal: 25,
+    paddingTop: 40,
+  },
+
+  /* ===== HEADER ===== */
+  header: {
+    alignItems: "center",
+    marginBottom: 25,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
+    marginBottom: 15,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "bold",
+    textAlign: "center",
+    color: "#022D36",
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 15,
+    textAlign: "center",
+    color: "#666",
+    marginBottom: 20,
+  },
+
+  /* ===== INPUT GROUP ===== */
+  inputGroup: {
+    marginBottom: 18,
+  },
+  label: {
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 6,
+    fontWeight: "500",
+  },
+
+  /* ===== NORMAL TEXT INPUT ===== */
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    backgroundColor: "#FAFAFA",
+    padding: 14,
+    borderRadius: 10,
+    fontSize: 15,
+  },
+
+  /* ===== PASSWORD CONTAINER (TEXT INPUT + EYE ICON) ===== */
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 10,
+    backgroundColor: "#FAFAFA",
+    height: 50,
+    paddingHorizontal: 12,
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#333",
+  },
+  eyeIcon: {
+    paddingHorizontal: 8,
+  },
+
+  /* ===== OR TEXT ===== */
+  orText: {
+    textAlign: "center",
+    color: "#888",
+    marginVertical: 15,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+
+  /* ===== BUTTON ===== */
   button: {
     backgroundColor: "#FFD700",
     paddingVertical: 15,
@@ -237,9 +328,24 @@ const styles = StyleSheet.create({
     elevation: 4,
     ...(Platform.OS === "web" && { cursor: "pointer" }),
   },
-  buttonText: { color: "#000", fontWeight: "bold", fontSize: 16 },
-  footerText: { textAlign: "center", color: "#555", fontSize: 14, marginTop: 10 },
-  link: { color: "#022D36", fontWeight: "bold" },
+  buttonText: {
+    color: "#000",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+
+  /* ===== FOOTER ===== */
+  footerText: {
+    textAlign: "center",
+    color: "#555",
+    fontSize: 14,
+    marginTop: 10,
+  },
+  link: {
+    color: "#022D36",
+    fontWeight: "bold",
+  },
 });
+
 
 export default SignInScreen;
