@@ -7,22 +7,69 @@ import {
   StyleSheet,
   Alert,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import axios from "axios";
 import BBSCARTLOGO from "../assets/images/bbscart-logo.png";
 
 const Stack = createNativeStackNavigator();
+const API_BASE = "https://bbscart.com/api";
 
 function EmailConfirmationScreen({ navigation }) {
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSend = () => {
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const handleSend = async () => {
     if (!email.trim()) {
       return Alert.alert("Error", "Please enter your email");
     }
-    Alert.alert("Success", "Confirmation link/OTP sent to " + email);
-    navigation.navigate("ResetPassword", { email });
+
+    if (!validateEmail(email)) {
+      return Alert.alert("Error", "Please enter a valid email address");
+    }
+
+    try {
+      setLoading(true);
+
+      // Call forgot password API (same as web authService.js)
+      const response = await axios.post(`${API_BASE}/auth/forgot-password`, {
+        email: email.trim(),
+      });
+
+      // Success - show message and navigate
+      Alert.alert(
+        "Success",
+        "Password reset link has been sent to your email. Please check your inbox.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Store email for next screen (optional)
+              navigation.navigate("ResetPassword", { email: email.trim() });
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Forgot Password Error:", error.response?.data || error.message);
+      
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to send reset link. Please try again.";
+
+      Alert.alert("Error", errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -39,8 +86,16 @@ function EmailConfirmationScreen({ navigation }) {
         autoCapitalize="none"
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleSend}>
-        <Text style={styles.buttonText}>Send Confirmation</Text>
+      <TouchableOpacity
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={handleSend}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Send Reset Link</Text>
+        )}
       </TouchableOpacity>
 
       {/* Sign In Link */}
@@ -58,29 +113,92 @@ function EmailConfirmationScreen({ navigation }) {
 }
 
 function ResetPasswordScreen({ route, navigation }) {
-  const { email } = route.params || {};
+  const { email, token } = route.params || {};
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Eye toggle states
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
-  const handleReset = () => {
+  const validatePassword = (password) => {
+    // Password must start with capital letter, min 8 chars, uppercase, lowercase, number & special
+    if (!password || password.length < 8) {
+      return "Password must be at least 8 characters long";
+    }
+    if (password[0] !== password[0].toUpperCase() || !/^[A-Z]/.test(password)) {
+      return "Password must start with a capital letter";
+    }
+    if (
+      !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/.test(
+        password
+      )
+    ) {
+      return "Password must contain uppercase, lowercase, number & special character";
+    }
+    return null;
+  };
+
+  const handleReset = async () => {
+    // Validation
     if (!newPassword || !confirmPassword) {
       return Alert.alert("Error", "Please fill all fields");
     }
+
     if (newPassword !== confirmPassword) {
       return Alert.alert("Error", "Passwords do not match");
     }
 
-    // Navigate to SignIn after reset
-    Alert.alert("Success", "Password changed for " + email, [
-      {
-        text: "OK",
-        onPress: () => navigation.navigate("SignIn"),
-      },
-    ]);
+    // Password strength validation
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      return Alert.alert("Invalid Password", passwordError);
+    }
+
+    // Check if token is available (required for reset)
+    if (!token) {
+      return Alert.alert(
+        "Error",
+        "Reset token is missing. Please use the link sent to your email or request a new reset link."
+      );
+    }
+
+    try {
+      setLoading(true);
+
+      // Call reset password API (same as web authService.js)
+      const response = await axios.post(
+        `${API_BASE}/auth/reset-password/${token}`,
+        {
+          password: newPassword,
+        }
+      );
+
+      // Success - show message and navigate to SignIn
+      Alert.alert(
+        "Success",
+        "Password reset successful. Please login with your new password.",
+        [
+          {
+            text: "OK",
+            onPress: () => navigation.navigate("SignIn"),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Reset Password Error:", error.response?.data || error.message);
+
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Password reset failed. The link may have expired. Please request a new one.";
+
+      Alert.alert("Error", errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderPasswordInput = (placeholder, value, setValue, visible, setVisible) => (
@@ -111,9 +229,32 @@ function ResetPasswordScreen({ route, navigation }) {
       {renderPasswordInput("New Password", newPassword, setNewPassword, showNewPass, setShowNewPass)}
       {renderPasswordInput("Confirm New Password", confirmPassword, setConfirmPassword, showConfirmPass, setShowConfirmPass)}
 
-      <TouchableOpacity style={styles.button} onPress={handleReset}>
-        <Text style={styles.buttonText}>Reset Password</Text>
-      </TouchableOpacity>
+      {token ? (
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleReset}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Reset Password</Text>
+          )}
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.infoContainer}>
+          <Text style={styles.infoText}>
+            Please check your email for the password reset link. The link contains
+            a token that is required to reset your password.
+          </Text>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => navigation.navigate("EmailConfirmation")}
+          >
+            <Text style={styles.secondaryButtonText}>Request New Link</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Sign In Link */}
       <Text style={styles.links}>
@@ -192,6 +333,10 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 16,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   links: {
     fontWeight: "600",
@@ -203,6 +348,31 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     paddingBottom: 15,
- 
+  },
+  infoContainer: {
+    marginTop: 10,
+    padding: 15,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  secondaryButton: {
+    backgroundColor: "#f5f5f5",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#007AFF",
+  },
+  secondaryButtonText: {
+    color: "#007AFF",
+    fontWeight: "600",
+    fontSize: 15,
   },
 });

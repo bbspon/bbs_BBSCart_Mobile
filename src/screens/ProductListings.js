@@ -16,114 +16,14 @@ import { useNavigation } from '@react-navigation/native';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width } = Dimensions.get('window');
-const ITEM_HEIGHT = 180;
-
-// ---------------- Mock Product Data ----------------
-const productData = [
-  {
-    id: '1',
-    name: 'Organic Apples',
-    category: 'Groceries',
-    image: 'https://images.unsplash.com/photo-1567306226416-28f0efdc88ce',
-    priceOptions: [
-      { quantity: '500g', price: 120 },
-      { quantity: '1kg', price: 220 },
-    ],
-  },
-  {
-    id: '2',
-    name: 'Fresh Bananas',
-    category: 'Groceries',
-    image:
-      'https://static.vecteezy.com/system/resources/previews/009/877/200/large_2x/bunch-of-fresh-banana-isolated-on-white-background-with-clipping-path-png.png',
-    priceOptions: [
-      { quantity: '6 pcs', price: 60 },
-      { quantity: '12 pcs', price: 110 },
-    ],
-  },
-  {
-    id: '3',
-    name: 'Basmati Rice',
-    category: 'Groceries',
-    image:
-      'https://images.rawpixel.com/image_png_social_landscape/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDI0LTAyL3Jhd3BpeGVsX29mZmljZV80M19hX2Nsb3NlLXVwX3Nob3RfcGhvdG9zaG9vdF9vZl9hX2Jhc21hdGlfcmljZV9jNDMxM2Q1OS03NjFlLTQ5OTQtODJmMi1jNTZhNmVlNzEzZjEucG5n.png',
-    priceOptions: [
-      { quantity: '1kg', price: 150 },
-      { quantity: '5kg', price: 700 },
-    ],
-  },
-  {
-    id: '4',
-    name: 'Whole Wheat Flour',
-    category: 'Groceries',
-    image: 'https://images.unsplash.com/photo-1627308595229-7830a5c91f9f',
-    priceOptions: [
-      { quantity: '1kg', price: 45 },
-      { quantity: '5kg', price: 210 },
-    ],
-  },
-  {
-    id: '5',
-    name: 'Samsung Galaxy S22',
-    category: 'Electronics',
-    image: 'https://images.unsplash.com/photo-1646073752268-6a52aca5f05d',
-    priceOptions: [
-      { size: '128GB', price: 62000 },
-      { size: '256GB', price: 68000 },
-    ],
-  },
-  {
-    id: '6',
-    name: 'Sony WH-1000XM4 Headphones',
-    category: 'Electronics',
-    image: 'https://images.unsplash.com/photo-1618365908648-9a09e843637c',
-    priceOptions: [{ size: 'Standard', price: 24990 }],
-  },
-  {
-    id: '7',
-    name: 'Dell XPS 13 Laptop',
-    category: 'Electronics',
-    image: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8',
-    priceOptions: [
-      { size: '8GB RAM / 256GB SSD', price: 95000 },
-      { size: '16GB RAM / 512GB SSD', price: 125000 },
-    ],
-  },
-  {
-    id: '8',
-    name: 'Nike Running Shoes',
-    category: 'Fashion',
-    image: 'https://images.unsplash.com/photo-1600180758895-57a9e2c46d4d',
-    priceOptions: [
-      { size: 'UK 7', price: 3999 },
-      { size: 'UK 8', price: 4199 },
-      { size: 'UK 9', price: 4399 },
-    ],
-  },
-  {
-    id: '9',
-    name: 'Men’s Casual T-Shirt',
-    category: 'Fashion',
-    image: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b',
-    priceOptions: [
-      { size: 'M', price: 699 },
-      { size: 'L', price: 749 },
-      { size: 'XL', price: 799 },
-    ],
-  },
-  {
-    id: '10',
-    name: 'LED Smart TV 43”',
-    category: 'Electronics',
-    image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3',
-    priceOptions: [
-      { size: '43-inch', price: 28000 },
-      { size: '55-inch', price: 42000 },
-    ],
-  },
-];
+const { width, height } = Dimensions.get('window');
+const ITEM_HEIGHT = 124; // Product container height (12 padding top + 100 image + 12 padding bottom)
+const API_BASE = 'https://bbscart.com/api';
+const IMAGE_BASE = 'https://bbscart.com/uploads/';
+const STATIC_PREFIXES = ['/uploads', '/uploads-bbscart'];
 
 // ---------------- Hero Banner ----------------
 const heroBannerImages = [
@@ -145,7 +45,7 @@ const heroBannerImages = [
 ];
 
 const ProductListings = () => {
-  const { addToCart } = useCart();
+  const { addItem, updateQty } = useCart();
   const {
     items: wishlistItems,
     addToWishlist,
@@ -158,10 +58,59 @@ const ProductListings = () => {
   const [loading, setLoading] = useState(false);
   const [allProductsLoaded, setAllProductsLoaded] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [categories, setCategories] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState(['All']);
 
   const navigation = useNavigation();
   const scrollX = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef(null);
+
+  // Helper functions to normalize product images
+  const norm = (u) => {
+    if (!u) return '';
+    const s = String(u).trim();
+    if (/^https?:\/\//i.test(s)) return s;
+    if (STATIC_PREFIXES.some((pre) => s.startsWith(pre + '/'))) {
+      return `https://bbscart.com${s}`;
+    }
+    return `${IMAGE_BASE}${encodeURIComponent(s)}`;
+  };
+
+  const pickImage = (p) => {
+    if (p.product_img_url) return p.product_img_url;
+    if (Array.isArray(p.gallery_img_urls) && p.gallery_img_urls[0]) {
+      return p.gallery_img_urls[0];
+    }
+    const firstSingleRaw = Array.isArray(p.product_img)
+      ? p.product_img[0]
+      : p.product_img;
+    const firstGalleryRaw = Array.isArray(p.gallery_imgs)
+      ? p.gallery_imgs[0]
+      : p.gallery_imgs;
+
+    const splitFirst = (val) => {
+      if (!val) return '';
+      const t = String(val).trim();
+      return t.includes('|')
+        ? t
+            .split('|')
+            .map((s) => s.trim())
+            .filter(Boolean)[0]
+        : t;
+    };
+
+    const chosen =
+      splitFirst(firstSingleRaw) ||
+      splitFirst(firstGalleryRaw) ||
+      p.image ||
+      '';
+    if (!chosen) return 'https://via.placeholder.com/300';
+    return norm(chosen);
+  };
+
+  const getImageUrl = (item) => {
+    return pickImage(item);
+  };
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -186,38 +135,116 @@ const ProductListings = () => {
     },
   );
 
+  // Fetch categories from API
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  // Fetch products when category changes
   useEffect(() => {
     loadProducts();
   }, [selectedCategory]);
 
-  const loadProducts = () => {
-    setLoading(true);
-    const filteredProducts = productData.filter(
-      product =>
-        selectedCategory === 'All' || product.category === selectedCategory,
-    );
-    setProducts(filteredProducts.slice(0, 10));
-    setLoading(false);
+  const fetchCategories = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/categories`);
+      const categoriesList = res.data || [];
+      setCategories(categoriesList);
+      // Extract category names for the picker
+      const categoryNames = ['All', ...categoriesList.map((cat) => cat.name)];
+      setCategoryOptions(categoryNames);
+    } catch (err) {
+      console.log('❌ CATEGORY API ERROR', err);
+      setCategories([]);
+    }
+  };
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      setAllProductsLoaded(false);
+
+      if (selectedCategory === 'All') {
+        // Fetch all products
+        const pincode = await AsyncStorage.getItem('deliveryPincode');
+        const res = await axios.get(`${API_BASE}/products/public`, {
+          params: { pincode },
+        });
+        const list = res.data?.products || res.data?.items || [];
+        setProducts(list);
+      } else {
+        // Find category by name
+        const category = categories.find(
+          (cat) => cat.name === selectedCategory,
+        );
+
+        if (!category) {
+          setProducts([]);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch subcategories for this category
+        const subcategoriesRes = await axios.get(
+          `${API_BASE}/products/catalog/subcategories`,
+          {
+            params: { category_id: category._id },
+          },
+        );
+
+        const subcategories =
+          subcategoriesRes.data?.items || subcategoriesRes.data || [];
+
+        if (subcategories.length === 0) {
+          setProducts([]);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch products for all subcategories
+        const pincode = await AsyncStorage.getItem('deliveryPincode');
+        const allProducts = [];
+
+        // Fetch products for each subcategory
+        for (const subcategory of subcategories) {
+          try {
+            const productsRes = await axios.get(
+              `${API_BASE}/products/public`,
+              {
+                params: { subcategoryId: subcategory._id, pincode },
+              },
+            );
+            const subProducts =
+              productsRes.data?.products || productsRes.data?.items || [];
+            allProducts.push(...subProducts);
+          } catch (err) {
+            console.log(
+              `❌ Error fetching products for subcategory ${subcategory._id}:`,
+              err,
+            );
+          }
+        }
+
+        // Remove duplicates based on _id
+        const uniqueProducts = allProducts.filter(
+          (product, index, self) =>
+            index === self.findIndex((p) => p._id === product._id),
+        );
+
+        setProducts(uniqueProducts);
+      }
+    } catch (err) {
+      console.log('❌ PRODUCT FETCH ERROR', err);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLoadMore = () => {
-    if (!loading && !allProductsLoaded) {
-      setLoading(true);
-      const currentLength = products.length;
-      const nextProducts = productData
-        .filter(
-          product =>
-            selectedCategory === 'All' || product.category === selectedCategory,
-        )
-        .slice(currentLength, currentLength + 10);
-
-      if (nextProducts.length > 0) {
-        setProducts(prev => [...prev, ...nextProducts]);
-      } else {
-        setAllProductsLoaded(true);
-      }
-      setLoading(false);
-    }
+    // For now, we load all products at once
+    // Can be enhanced with pagination if needed
+    setAllProductsLoaded(true);
   };
 
   const renderPagination = () => (
@@ -237,16 +264,8 @@ const ProductListings = () => {
     return price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
-  const handleAddToCart = product => {
-    console.log('Added to cart:', product.name);
-    navigation.navigate('CartPage', { product });
-  };
-
-  const toggleWishlist = async productId => {
-    // Check if product is already in wishlist
-    // Note: ProductListings uses mock data with 'id' field, but API products use '_id'
-    // We'll need to check if the productId exists in wishlistItems
-    const isWishlisted = wishlistItems.some(item => {
+  const toggleWishlist = async (productId) => {
+    const isWishlisted = wishlistItems.some((item) => {
       const wProductId = item.product?._id || item._id || item.id;
       return (
         wProductId === productId ||
@@ -261,23 +280,23 @@ const ProductListings = () => {
     }
   };
 
-  const handleViewProduct = product => {
-    navigation.navigate('ProductDetails', { product });
+  const handleViewProduct = (product) => {
+    navigation.navigate('ProductDetails', { productId: product._id });
   };
 
-  const incrementQuantity = productId => {
-    setProductQuantities(prev => ({
+  const incrementQuantity = (productId) => {
+    setProductQuantities((prev) => ({
       ...prev,
       [productId]: (prev[productId] || 0) + 1,
     }));
   };
 
-  const decrementQuantity = productId => {
-    setProductQuantities(prev => {
+  const decrementQuantity = (productId) => {
+    setProductQuantities((prev) => {
       const currentQty = prev[productId] || 0;
       if (currentQty <= 1) {
         const updated = { ...prev };
-        delete updated[productId]; // removes qty → shows Add to Cart
+        delete updated[productId];
         return updated;
       }
       return {
@@ -287,98 +306,105 @@ const ProductListings = () => {
     });
   };
 
-  const filteredData =
-    selectedCategory === 'All'
-      ? productData
-      : productData.filter(product => product.category === selectedCategory);
-
   const renderProduct = ({ item }) => {
-    const currentPriceOption =
-      selectedQuantity[item.id] || item.priceOptions[0];
-    const productQuantity = productQuantities[item.id] || 0;
+    const productQuantity = productQuantities[item._id] || 0;
+    const productPrice = item.price || 0;
 
-    // Check if product is in wishlist - handle both API products (_id) and mock products (id)
-    const isWishlisted = wishlistItems.some(wItem => {
+    // Check if product is in wishlist
+    const isWishlisted = wishlistItems.some((wItem) => {
       const wProductId = wItem.product?._id || wItem._id || wItem.id;
       return (
-        wProductId === item.id ||
         wProductId === item._id ||
-        wProductId?.toString() === item.id?.toString()
+        wProductId?.toString() === item._id?.toString()
       );
     });
 
     return (
       <View style={styles.productContainer}>
-        <Image source={{ uri: item.image }} style={styles.productImage} />
+        <TouchableOpacity
+          style={styles.productImageContainer}
+          onPress={() => handleViewProduct(item)}
+        >
+          <Image
+            source={{ uri: getImageUrl(item) }}
+            style={styles.productImage}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
         <View style={styles.productDetails}>
-           <View style={styles.productTitleContainer}>
-                      <Text style={styles.productName}>{item.name}</Text>
-          <TouchableOpacity
-            style={styles.wishlistIcon}
-            onPress={() => toggleWishlist(item.id)}
-          >
-            <Ionicons
-              name={isWishlisted ? 'heart' : 'heart-outline'}
-              size={22}
-              color={isWishlisted ? 'red' : '#555'}
-            />
-          </TouchableOpacity>
+          <View style={styles.productTitleContainer}>
+            <TouchableOpacity
+              style={styles.productNameContainer}
+              onPress={() => handleViewProduct(item)}
+            >
+              <Text style={styles.productName} numberOfLines={2}>
+                {item.name}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.wishlistIcon}
+              onPress={() => toggleWishlist(item._id)}
+            >
+              <Ionicons
+                name={isWishlisted ? 'heart' : 'heart-outline'}
+                size={22}
+                color={isWishlisted ? '#e91e63' : '#666'}
+              />
+            </TouchableOpacity>
           </View>
-          <View style={styles.priceQuantityContainer}>
+          
+          <View style={styles.priceContainer}>
             <Text style={styles.productPrice}>
-              ₹{formatPrice(currentPriceOption.price * productQuantity)}
+              ₹{formatPrice(productPrice * productQuantity || productPrice)}
             </Text>
-            <View style={styles.quantityPickerContainer}>
-              <Text style={styles.quantityText}>Size:</Text>
-              <Picker
-                selectedValue={
-                  currentPriceOption.quantity || currentPriceOption.size
-                }
-                style={styles.quantityPicker}
-                onValueChange={value =>
-                  setSelectedQuantity(prev => ({
-                    ...prev,
-                    [item.id]: item.priceOptions.find(
-                      option =>
-                        option.quantity === value || option.size === value,
-                    ),
-                  }))
-                }
-              >
-                {item.priceOptions.map(option => (
-                  <Picker.Item
-                    key={option.quantity || option.size}
-                    label={option.quantity || option.size}
-                    value={option.quantity || option.size}
-                  />
-                ))}
-              </Picker>
-            </View>
           </View>
 
           {/* Add to Cart / Quantity Control */}
-          <View style={{ marginTop: 10 }}>
+          <View style={styles.actionContainer}>
             {productQuantity === 0 ? (
               <TouchableOpacity
                 style={styles.addToCartButton}
-                onPress={() => {
-                  incrementQuantity(item.id);
-                  addToCart(item);
+                onPress={(e) => {
+                  e.stopPropagation();
+                  incrementQuantity(item._id);
+                  addItem({
+                    productId: item._id,
+                    name: item.name,
+                    price: item.price,
+                    image: getImageUrl(item),
+                    qty: 1,
+                  });
                 }}
               >
-                <Ionicons name="cart-outline" size={16} color="#5a6c0d" />
-                <Text style={styles.addToCartText}> Add to Cart</Text>
+                <Ionicons name="cart-outline" size={18} color="#5a6c0d" />
+                <Text style={styles.addToCartText}>Add to Cart</Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.quantityControl}>
-                <TouchableOpacity onPress={() => decrementQuantity(item.id)}>
-                  <Ionicons name="remove" size={16} color="#5a6c0d" />
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    decrementQuantity(item._id);
+                    if (productQuantity > 1) {
+                      updateQty(item._id, productQuantity - 1);
+                    }
+                  }}
+                >
+                  <Ionicons name="remove" size={18} color="#5a6c0d" />
                 </TouchableOpacity>
 
                 <Text style={styles.quantityValue}>{productQuantity}</Text>
 
-                <TouchableOpacity onPress={() => incrementQuantity(item.id)}>
-                  <Ionicons name="add" size={16} color="#5a6c0d" />
+                <TouchableOpacity
+                  style={styles.quantityButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    incrementQuantity(item._id);
+                    updateQty(item._id, productQuantity + 1);
+                  }}
+                >
+                  <Ionicons name="add" size={18} color="#5a6c0d" />
                 </TouchableOpacity>
               </View>
             )}
@@ -409,29 +435,47 @@ const ProductListings = () => {
 
       <View style={styles.filterContainer}>
         <Text style={styles.filterText}>Filter by Category:</Text>
-        <Picker
-          selectedValue={selectedCategory}
-          style={styles.categoryPicker}
-          onValueChange={itemValue => setSelectedCategory(itemValue)}
-        >
-          <Picker.Item label="All" value="All" />
-          <Picker.Item label="Groceries" value="Groceries" />
-          <Picker.Item label="Electronics" value="Electronics" />
-          <Picker.Item label="Fashion" value="Fashion" />
-        </Picker>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={selectedCategory}
+            style={styles.categoryPicker}
+            onValueChange={(itemValue) => setSelectedCategory(itemValue)}
+          >
+            {categoryOptions.map((category) => (
+              <Picker.Item
+                key={category}
+                label={category}
+                value={category}
+              />
+            ))}
+          </Picker>
+        </View>
       </View>
 
-      <Text style={styles.totalProductsText}>
-        Total Products: {filteredData.length}
-      </Text>
+      <View style={styles.totalProductsContainer}>
+        <Text style={styles.totalProductsText}>
+          Total Products: {products.length}
+        </Text>
+      </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#0000ff" />
+        </View>
+      ) : products.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.noProductsText}>No Products Found</Text>
+          <Text style={styles.noProductsSubtext}>
+            {selectedCategory !== 'All'
+              ? `No products available in ${selectedCategory} category`
+              : 'No products available at the moment'}
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={filteredData}
+          data={products}
           renderItem={renderProduct}
-          keyExtractor={item => item.id}
+          keyExtractor={(item) => item._id}
           getItemLayout={(data, index) => ({
             length: ITEM_HEIGHT,
             offset: ITEM_HEIGHT * index,
@@ -447,99 +491,201 @@ const ProductListings = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  heroBanner: { height: 150, marginBottom: 10 },
-  slide: { width, justifyContent: 'center', alignItems: 'center' },
-  bannerImage: { width: '100%', height: 200 },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  heroBanner: {
+    height: height * 0.22,
+    maxHeight: 200,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+  },
+  slide: {
+    width,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
   pagination: {
     flexDirection: 'row',
     position: 'absolute',
-    bottom: 10,
+    bottom: 12,
     alignSelf: 'center',
-  },
-  productTitleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    zIndex: 1,
   },
   dot: {
-    height: 10,
-    width: 10,
+    height: 8,
+    width: 8,
     backgroundColor: '#fff',
-    borderRadius: 5,
-    marginHorizontal: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
   },
   filterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  filterText: { fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
-  categoryPicker: { height: 50, width: 150 },
+  filterText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  pickerContainer: {
+    flex: 1,
+    maxWidth: 180,
+    marginLeft: 12,
+  },
+  categoryPicker: {
+    height: 45,
+    width: '100%',
+  },
+  totalProductsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
   totalProductsText: {
-    fontSize: 14,
-    marginTop: 5,
-    marginRight: 15,
-    textAlign: 'right',
+    fontSize: 13,
     color: '#666',
+    textAlign: 'right',
+    fontWeight: '500',
   },
-  wishlistIcon: { position: 'absolute', top: 0, right: 0, padding: 5 },
-  productList: { padding: 10 },
+  productList: {
+    padding: 12,
+  },
   productContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    padding: 10,
-    marginBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    padding: 12,
+    marginBottom: 12,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  productImage: { width: 80, height: 80, borderRadius: 8 },
-  productDetails: { flex: 1, paddingLeft: 10 },
+  productImageContainer: {
+    width: width * 0.25,
+    maxWidth: 110,
+    height: width * 0.25,
+    maxHeight: 110,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#f0f0f0',
+  },
+  productImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  productDetails: {
+    flex: 1,
+    paddingLeft: 12,
+    justifyContent: 'space-between',
+  },
+  productTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  productNameContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
   productName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    lineHeight: 20,
+  },
+  wishlistIcon: {
+    padding: 4,
+    marginTop: -4,
+  },
+  priceContainer: {
+    marginBottom: 10,
+  },
+  productPrice: {
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: -10,
-    color: '#697e0f',
+    fontWeight: '700',
+    color: '#2874F0',
   },
-  priceQuantityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-    marginBottom: -8,
-  },
-  productPrice: { fontSize: 14, fontWeight: 'bold', color: '#000' },
-  quantityPickerContainer: { flexDirection: 'row', alignItems: 'center' },
-  quantityText: { fontSize: 14 },
-  quantityPicker: { width: 110 },
-  quantityControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 80,
-    paddingHorizontal: 5,
-    borderWidth: 2,
-    borderColor: '#cbda8b',
-    borderRadius: 10,
-  },
-  quantityValue: { fontSize: 16, marginHorizontal: 10 },
-  actionIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 25,
-    marginTop: 10,
+  actionContainer: {
+    marginTop: 4,
   },
   addToCartButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    backgroundColor: '#cbda8b',
-    borderRadius: 5,
     justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#cbda8b',
+    borderRadius: 6,
+    minWidth: 120,
   },
-  addToCartText: { color: '#5a6c0d', marginLeft: 5, fontWeight: 'bold' },
+  addToCartText: {
+    color: '#5a6c0d',
+    marginLeft: 6,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  quantityControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#cbda8b',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    minWidth: 100,
+  },
+  quantityButton: {
+    padding: 4,
+  },
+  quantityValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginHorizontal: 12,
+    color: '#333',
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  noProductsText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#666',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  noProductsSubtext: {
+    fontSize: 15,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
 });
 
 export default ProductListings;

@@ -286,7 +286,7 @@ const TrustStrip = ({ navigation }) => (
       emoji="🙎🏻‍♂️"
       text="User Account" onPress={() => navigation.navigate('UserAccount')}
     />
-    <TrustItem emoji="⚙️" text="Setting" onPress={() => navigation.navigate('Settings')} />
+    <TrustItem emoji="⚙️" text="Profile Settings" onPress={() => navigation.navigate('ProfileSettings')} />
   </View>
 );
 

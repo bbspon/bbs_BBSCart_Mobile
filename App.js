@@ -1,8 +1,9 @@
 import React from "react";
-import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
+import { View, TouchableOpacity, Text, StyleSheet, Image } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import BBSCARTLOGO from "./src/assets/images/bbscart-logo.png";
 
 // ---------- Screens ----------
 import Home from "./src/screens/Home";
@@ -129,6 +130,19 @@ function AuthStack() {
   );
 }
 
+/* ---------------- HEADER LOGO COMPONENT ---------------- */
+function HeaderLogo() {
+  return (
+    <View style={styles.logoContainer}>
+      <Image
+        source={BBSCARTLOGO}
+        style={styles.headerLogo}
+        resizeMode="contain"
+      />
+    </View>
+  );
+}
+
 /* ---------------- MAIN APP STACK ---------------- */
 function MainStack() {
   return (
@@ -137,14 +151,22 @@ function MainStack() {
         name="Home"
         component={Home}
         options={({ navigation }) => ({
-          title: "BBSCART",
+          headerTitle: () => <HeaderLogo />,
           headerTitleAlign: "center",
-          headerTitleStyle: {
-            fontWeight: "bold",
-            fontSize: 20,
-            color: "black",
+          headerStyle: { 
+            backgroundColor: "white",
+            height: 60,
+            elevation: 0,
+            shadowOpacity: 0,
           },
-          headerStyle: { backgroundColor: "white" },
+          headerTitleContainerStyle: {
+            left: 0,
+            right: 0,
+            justifyContent: "center",
+            alignItems: "center",
+            height: 60,
+            overflow: "visible",
+          },
           headerRight: () => <HeaderIcons navigation={navigation} />,
         })}
       />
@@ -206,6 +228,20 @@ export default function App() {
 
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
+  logoContainer: {
+    width: "100%",
+    height: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "visible",
+    position: "relative",
+  },
+  headerLogo: {
+    width: 350,
+    height: 150,
+    marginTop: -45,
+    marginBottom: -45,
+  },
   headerIconsContainer: {
     flexDirection: "row",
     alignItems: "center",

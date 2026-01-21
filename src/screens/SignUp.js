@@ -55,6 +55,12 @@ const Registration = () => {
     if (!password) {
       Alert.alert('Error', 'Password is required');
       return false;
+    } else if (password.length > 0 && !/^[A-Z]/.test(password)) {
+      Alert.alert(
+        'Error',
+        'Password must start with a capital letter',
+      );
+      return false;
     } else if (
       !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/.test(
         password,
