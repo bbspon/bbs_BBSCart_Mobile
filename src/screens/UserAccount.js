@@ -134,11 +134,6 @@ const handleLogout = async () => {
           onPress={() => handleNavigation("ProfileSettings")}
         />
         <MenuItem
-          emoji="📍"
-          text="Saved Addresses"
-          onPress={() => handleNavigation("Addresses")}
-        />
-        <MenuItem
           emoji="⚙️"
           text="App Settings"
           onPress={() => handleNavigation("Settings")}
