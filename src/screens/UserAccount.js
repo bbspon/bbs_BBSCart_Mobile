@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
+import { useAuth } from "../contexts/AuthContext";
 
 const UserAccount = () => {
   const [user, setUser] = useState({
@@ -18,6 +19,7 @@ const UserAccount = () => {
     profilePic: "",
   });
   const navigation = useNavigation();
+  const { logout } = useAuth();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -44,22 +46,45 @@ const UserAccount = () => {
     navigation.navigate(screen);
   };
 const handleLogout = async () => {
-  try {
-    await AsyncStorage.removeItem("auth_user");
+  Alert.alert(
+    "Logout",
+    "Are you sure you want to logout?",
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            // Clear all AsyncStorage items
+            await AsyncStorage.multiRemove([
+              "auth_user",
+              "deliveryPincode",
+              "assignedStore",
+            ]);
 
-    setUser({
-      name: "",
-      email: "",
-      profilePic: "",
-    });
+            // Clear local state
+            setUser({
+              name: "",
+              email: "",
+              profilePic: "",
+            });
 
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "Auth" }], // CHANGE THIS if your stack name differs
-    });
-  } catch (err) {
-    Alert.alert("Error", "Failed to logout. Try again.");
-  }
+            // Use AuthContext to logout (this will trigger RootNavigator to switch to AuthStack)
+            logout();
+
+            Alert.alert("Success", "You have been logged out successfully");
+          } catch (err) {
+            console.log("Logout error:", err);
+            Alert.alert("Error", "Failed to logout. Please try again.");
+          }
+        },
+      },
+    ]
+  );
 };
 
 

@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useWishlist } from "../contexts/WishlistContext";
+import { useCart } from "../contexts/CartContext";
 
 const IMAGE_BASE = "https://bbscart.com/uploads/";
 
@@ -25,6 +26,9 @@ export default function Wishlist({ navigation }) {
     removeFromWishlist,
     fetchWishlist,
   } = useWishlist();
+  
+  // 🔹 CART CONTEXT
+  const { addItem } = useCart();
 
   // 🔹 LOCAL UI STATE (unchanged functionality)
   const [wishlist, setWishlist] = useState([]);
@@ -58,6 +62,7 @@ export default function Wishlist({ navigation }) {
 
           return {
             id: product._id,
+            _id: product._id, // Keep original _id for reference
             name: product.name || "Unknown Product",
             price: product.price || 0,
             oldPrice: product.oldPrice || product.mrp || null,
@@ -65,6 +70,8 @@ export default function Wishlist({ navigation }) {
             inStock: (product.stock ?? 0) > 0,
             note: "",
             alert: false,
+            // Store full product reference for cart
+            productData: product,
           };
         })
         .filter(Boolean); // Remove any null entries
@@ -90,8 +97,26 @@ export default function Wishlist({ navigation }) {
   };
 
   const moveToCart = (item) => {
-    Alert.alert("Moved to Cart", `${item.name} has been added to your cart.`);
-    removeFromWishlist(item.id);
+    try {
+      // Add item to cart using CartContext
+      addItem({
+        productId: item.id,
+        name: item.name,
+        price: item.price,
+        image: item.image,
+        qty: 1,
+        variantId: null,
+      });
+      
+      // Remove from wishlist
+      removeFromWishlist(item.id);
+      
+      // Show success message
+      Alert.alert("Moved to Cart", `${item.name} has been added to your cart.`);
+    } catch (error) {
+      console.log("Move to cart error:", error);
+      Alert.alert("Error", "Failed to add item to cart. Please try again.");
+    }
   };
 
   const goToProductDetail = (item) => {

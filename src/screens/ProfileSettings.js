@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../contexts/AuthContext';
 
 const API_BASE_URL = 'https://bbscart.com/api';
 
@@ -34,6 +35,7 @@ const extractPhone = (data) => {
 // ---------------- Component ----------------
 const ProfileSettingsScreen = () => {
     const navigation = useNavigation();
+    const { logout } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState({
@@ -171,32 +173,127 @@ const ProfileSettingsScreen = () => {
     }
   };
   const handleLogout = async () => {
-    try {
-      // Clear AsyncStorage
-      await AsyncStorage.removeItem("auth_user");
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Clear all AsyncStorage items
+              await AsyncStorage.multiRemove([
+                "auth_user",
+                "deliveryPincode",
+                "assignedStore",
+              ]);
 
-      // Clear local state
-      setUser({
-        name: "",
-        email: "",
-        profilePic: "",
-      });
+              // Clear local state
+              setProfile({
+                name: "",
+                email: "",
+                phone: "",
+                tier: "",
+                profilePic: "",
+              });
 
-      // Optional confirmation
-      Alert.alert("Logged out", "You have been logged out successfully");
+              // Use AuthContext to logout (this will trigger RootNavigator to switch to AuthStack)
+              logout();
 
-      // Navigate to Login or Home
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "SignIn" }], // change to "Login" if needed
-      });
-    } catch (err) {
-      Alert.alert("Error", "Failed to logout. Try again.");
-    }
+              Alert.alert("Success", "You have been logged out successfully");
+            } catch (err) {
+              console.log("Logout error:", err);
+              Alert.alert("Error", "Failed to logout. Please try again.");
+            }
+          },
+        },
+      ]
+    );
   };
 
-  const handleDeleteAccount = () =>
-    Alert.alert('Delete Account', 'Account deletion triggered.');
+  const handleDeleteAccount = async () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to delete your account? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const stored = await AsyncStorage.getItem("auth_user");
+              if (!stored) {
+                Alert.alert("Error", "User not logged in");
+                return;
+              }
+
+              const parsed = JSON.parse(stored);
+              const token = parsed?.token;
+
+              if (!token) {
+                Alert.alert("Error", "Authentication token not found");
+                return;
+              }
+
+              // Call delete account API
+              const res = await fetch(`${API_BASE_URL}/auth/delete-account`, {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+              });
+
+              const data = await res.json();
+
+              if (!res.ok) {
+                throw new Error(data?.message || "Failed to delete account");
+              }
+
+              // Clear all AsyncStorage items
+              await AsyncStorage.multiRemove([
+                "auth_user",
+                "deliveryPincode",
+                "assignedStore",
+              ]);
+
+              // Clear local state
+              setProfile({
+                name: "",
+                email: "",
+                phone: "",
+                tier: "",
+                profilePic: "",
+              });
+
+              // Use AuthContext to logout
+              logout();
+
+              Alert.alert(
+                "Account Deleted",
+                "Your account has been permanently deleted."
+              );
+            } catch (err) {
+              console.log("Delete account error:", err);
+              Alert.alert(
+                "Error",
+                err.message || "Failed to delete account. Please try again."
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleChangePassword = () =>
     Alert.alert('Change Password', 'Password change triggered.');

@@ -115,8 +115,11 @@ const SignInScreen = ({ navigation }) => {
         JSON.stringify(authUser)
       );
 
+      // Call AuthContext login to update auth state
+      login();
+
       // Debug log (temporary)
-      console.log("auth_user CREATED →", authUser); login(data);
+      console.log("auth_user CREATED →", authUser);
 
     } catch (error) {
       Alert.alert("Login Failed", error.message);
