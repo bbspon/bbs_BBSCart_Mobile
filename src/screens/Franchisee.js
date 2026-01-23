@@ -11,17 +11,55 @@ import {
   Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { useNavigation } from "@react-navigation/native";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "react-native-image-picker";
 import Icon from "react-native-vector-icons/Ionicons";
 import { showMessage } from "react-native-flash-message";
-import axios from "axios";
-import { useNavigation } from "@react-navigation/native";
 
 const API_URL = "https://bbscart.com";
 
-// Real API functions - replaced mock functions
+// Real API functions - integrated from web form
+const uploadDoc = async (fileUri, fileName, fileType) => {
+  const fd = new FormData();
+  fd.append("document", {
+    uri: fileUri,
+    type: fileType || "image/jpeg",
+    name: fileName || "document.jpg",
+  });
+
+  try {
+    const { data } = await axios.post(`${API_URL}/api/franchisees/upload`, fd, {
+      timeout: 30000, // 30s timeout
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    console.log("upload response:", data);
+    if (!data?.ok || !data?.fileUrl) {
+      throw new Error(`Upload failed: ${JSON.stringify(data || "no-response")}`);
+    }
+    return data.fileUrl;
+  } catch (err) {
+    console.error("uploadDoc error:", err?.response || err.message || err);
+    throw err;
+  }
+};
+
+const stepByKey = async (payload) => {
+  try {
+    const response = await axios.post(`${API_URL}/api/franchisees/step-by-key`, payload);
+    return response;
+  } catch (err) {
+    console.error("stepByKey error:", err?.response || err.message || err);
+    throw err;
+  }
+};
+
+// Using mock data - all backend calls replaced with mock functions
 // Options
 const constitutionOptions = [
   { value: "proprietorship", label: "Proprietorship" },
@@ -33,34 +71,7 @@ const constitutionOptions = [
   { value: "society", label: "Society" },
 ];
 
-/** ------------------------------
- * BPC ID generator helpers
- * TH{STATE}{CITY}{DDMMYY}{NNNNN}
- * STATE = first 2 letters of register_state (uppercased, A–Z only)
- * CITY  = first 2 letters of register_city  (uppercased, A–Z only)
- * DATE  = today DDMMYY
- * NNNNN = from backend /next-seq if present; else fallback (stable per day)
- * ------------------------------ */
-const to2 = (txt = "") => (txt.replace(/[^A-Za-z]/g, "").toUpperCase() + "XX").slice(0, 2);
-const pad5 = (n) => String(Math.max(0, Number(n) || 0)).padStart(5, "0");
-const todayDDMMYY = () => {
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yy = String(d.getFullYear()).slice(-2);
-  return `${dd}${mm}${yy}`;
-};
-/** fallback run-number that’s deterministic for a given (state, city, date) */
-const fallbackRun = (state2, city2, ddmmyy) => {
-  const seed = `${state2}${city2}${ddmmyy}`;
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-  return pad5((hash % 99999) + 1);
-};
-
-export default function TerritoryHeadForm({ navigation: propNavigation }) {
+export default function FranchiseHeadForm({ value, onChange, navigation: propNavigation }) {
   // Use navigation from hook or prop
   const hookNavigation = useNavigation();
   const safeNavigation = propNavigation || hookNavigation || {
@@ -72,27 +83,21 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     },
   };
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [dobValue, setDobValue] = useState(null);
-
+  const [openTo, setOpenTo] = useState("year");
   const [step, setStep] = useState(1);
-  const [territoryHeadId, setTerritoryHeadId] = useState("");
+  const [franchiseeId, setFranchiseeId] = useState("");
 
-  // NEW: store generated BPC ID and show in UI (Step 2)
-  const [bpcId, setBpcId] = useState("");
-
-  // Load territoryHeadId and bpcId from AsyncStorage on mount
+  // Load franchiseeId from AsyncStorage on mount
   useEffect(() => {
-    const loadData = async () => {
+    const loadFranchiseeId = async () => {
       try {
-        const id = await AsyncStorage.getItem("territoryHeadId");
-        if (id) setTerritoryHeadId(id);
-        const storedBpc = await AsyncStorage.getItem("bpcId");
-        if (storedBpc) setBpcId(storedBpc);
+        const id = await AsyncStorage.getItem("franchiseeId");
+        if (id) setFranchiseeId(id);
       } catch (error) {
-        console.error("Error loading data:", error);
+        console.error("Error loading franchiseeId:", error);
       }
     };
-    loadData();
+    loadFranchiseeId();
   }, []);
 
   // Loading flags for uploads/saves
@@ -100,7 +105,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
   const [loadingAFront, setLoadingAFront] = useState(false);
   const [loadingABack, setLoadingABack] = useState(false);
   const [loadingGST, setLoadingGST] = useState(false);
-
+  const [dobValue, setDobValue] = useState(null);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -123,7 +128,9 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     gst_locality: "",
     gst_district: "",
     gst_state: "",
+    pan_pic: "",
   });
+
 
   const fmtAadhaarUI = (digits) =>
     (digits || "")
@@ -131,25 +138,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       .replace(/(\d{4})(?=\d)/g, "$1 ")
       .trim();
 
-  // Real upload helper - uses API
-  const uploadDoc = async (fileUri, fileName, fileType) => {
-    try {
-      const fd = new FormData();
-      fd.append("document", {
-        uri: fileUri,
-        type: fileType || "image/jpeg",
-        name: fileName || "document.jpg",
-      });
-      const { data } = await axios.post(`${API_URL}/api/territory-heads/upload`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      if (!data?.ok || !data?.fileUrl) throw new Error("Upload failed");
-      return data.fileUrl;
-    } catch (err) {
-      console.error("uploadDoc error:", err.message || err);
-      throw err;
-    }
-  };
+  // uploadDoc is now defined at the top level - uses real API
 
   // -------------------- PAN (Step 1) --------------------
   const onPanUpload = async () => {
@@ -167,28 +156,47 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       const asset = response.assets?.[0];
       if (!asset) return;
 
-      setLoadingPan(true);
-      try {
+  setLoadingPan(true);
+  try {
+        console.log("Starting PAN upload, file:", asset.fileName, asset.fileSize);
         const fileUrl = await uploadDoc(asset.uri, asset.fileName, asset.type);
-        const r = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, {
-          territoryHeadId,
-          pan_pic: fileUrl,
-        });
-        console.log("Territory Head submit response:", r.data);
+    console.log("PAN uploaded, fileUrl:", fileUrl);
 
-        const id = r?.data?.data?._id;
-        if (id && !territoryHeadId) {
-          setTerritoryHeadId(id);
-          await AsyncStorage.setItem("territoryHeadId", id);
-        }
-      } catch (err) {
-        console.error(err);
-        Alert.alert("Error", "PAN upload failed");
-      } finally {
-        setLoadingPan(false);
-      }
+    setFormData((p) => ({ ...p, pan_pic: fileUrl }));
+
+        const r = await stepByKey({
+        franchiseeId,
+        pan_pic: fileUrl,
+        });
+    console.log("step-by-key response:", r?.data);
+
+    const newId = r?.data?.data?._id;
+    if (newId && !franchiseeId) {
+      setFranchiseeId(newId);
+          await AsyncStorage.setItem("franchiseeId", newId);
+    }
+
+        showMessage({
+          type: "success",
+          message: "PAN uploaded successfully",
+        });
+  } catch (err) {
+    console.error("onPanUpload failed:", err?.response || err?.message || err);
+    const msg =
+      err?.response?.data?.message ||
+      err?.message ||
+          "PAN upload failed";
+        showMessage({
+          type: "danger",
+          message: msg,
+        });
+  } finally {
+    setLoadingPan(false);
+  }
     });
-  };
+};
+
+
   const validateStep1 = () => {
     if (!formData.firstName.trim()) {
       showMessage({ type: "danger", message: "Enter First Name" });
@@ -210,8 +218,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       return false;
     }
 
-    if (!territoryHeadId) {
-      showMessage({ type: "danger", message: "Upload PAN Card before continuing" });
+    if (!formData.pan_pic) {
+      showMessage({ type: "danger", message: "Upload PAN Card" });
       return false;
     }
 
@@ -220,20 +228,21 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
 
   const saveStep1AndNext = async () => {
     if (!validateStep1()) return;
+
     try {
       const payload = {
-        territoryHeadId,
+        franchiseeId,
         pan_number: (formData.panNumber || "").toUpperCase(),
         vendor_fname: formData.firstName || "",
         vendor_lname: formData.lastName || "",
-        dob: dobValue ? dobValue.toISOString().split("T")[0] : "",
+        dob: formData.dob || "",
       };
-      const resp = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, payload);
+      const resp = await stepByKey(payload);
       if (!resp?.data?.ok) throw new Error("Save failed");
       const id = resp?.data?.data?._id;
       if (id) {
-        setTerritoryHeadId(id);
-        await AsyncStorage.setItem("territoryHeadId", id);
+        setFranchiseeId(id);
+        await AsyncStorage.setItem("franchiseeId", id);
       }
       setStep(2);
       showMessage({
@@ -262,24 +271,24 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       const asset = response.assets?.[0];
       if (!asset) return;
 
-      setLoadingAFront(true);
-      try {
+    setLoadingAFront(true);
+    try {
         const fileUrl = await uploadDoc(asset.uri, asset.fileName, asset.type);
-        const r = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, {
-          territoryHeadId,
+        const r = await stepByKey({
+          franchiseeId,
           aadhar_pic_front: fileUrl,
         });
         const id = r?.data?.data?._id;
-        if (id && !territoryHeadId) {
-          setTerritoryHeadId(id);
-          await AsyncStorage.setItem("territoryHeadId", id);
-        }
-      } catch (err) {
-        console.error(err);
-        Alert.alert("Error", "Aadhaar front upload failed");
-      } finally {
-        setLoadingAFront(false);
+      if (id && !franchiseeId) {
+        setFranchiseeId(id);
+          await AsyncStorage.setItem("franchiseeId", id);
       }
+    } catch (err) {
+      console.error(err);
+        Alert.alert("Error", "Aadhaar front upload failed");
+    } finally {
+      setLoadingAFront(false);
+    }
     });
   };
 
@@ -298,64 +307,29 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       const asset = response.assets?.[0];
       if (!asset) return;
 
-      setLoadingABack(true);
-      try {
+    setLoadingABack(true);
+    try {
         const fileUrl = await uploadDoc(asset.uri, asset.fileName, asset.type);
-        const r = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, {
-          territoryHeadId,
+        const r = await stepByKey({
+          franchiseeId,
           aadhar_pic_back: fileUrl,
         });
-        const id = r?.data?.data?._id;
-        if (id && !territoryHeadId) {
-          setTerritoryHeadId(id);
-          await AsyncStorage.setItem("territoryHeadId", id);
-        }
-      } catch (err) {
-        console.error(err);
-        Alert.alert("Error", "Aadhaar back upload failed");
-      } finally {
-        setLoadingABack(false);
+      const id = r?.data?.data?._id;
+      if (id && !franchiseeId) {
+        setFranchiseeId(id);
+          await AsyncStorage.setItem("franchiseeId", id);
       }
+    } catch (err) {
+      console.error(err);
+        Alert.alert("Error", "Aadhaar back upload failed");
+    } finally {
+      setLoadingABack(false);
+    }
     });
   };
-
-  /** NEW: Generate bpcId as soon as we have City/State (Step 2) */
-  const maybeGenerateBpcId = async () => {
-    const state2 = to2(formData.register_state);
-    const city2 = to2(formData.register_city);
-    if (!state2.trim() || !city2.trim()) return;
-
-    const ddmmyy = todayDDMMYY();
-
-    // Try server counter first (recommended). Fallback if not present.
-    let run = "";
-    try {
-      const url = `${API_URL}/api/territory-heads/next-seq?state=${encodeURIComponent(
-        state2
-      )}&city=${encodeURIComponent(city2)}&date=${encodeURIComponent(ddmmyy)}`;
-      const r = await axios.get(url);
-      // expect { ok:true, next: 12 } or { next:"00012" }
-      const next = r?.data?.next;
-      run = typeof next === "number" ? pad5(next) : pad5(next);
-    } catch {
-      run = fallbackRun(state2, city2, ddmmyy);
-    }
-
-    const code = `TH${state2}${city2}${ddmmyy}${run}`;
-    setBpcId(code);
-    await AsyncStorage.setItem("bpcId", code);
-  };
-
-  /** Auto-generate when state/city changes (Step 2 screen) */
-  useEffect(() => {
-    if (step === 2) {
-      maybeGenerateBpcId();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, formData.register_state, formData.register_city]);
   const validateStep2 = () => {
-    if (!territoryHeadId) {
-      showMessage({ type: "danger", message: "Complete Step 1 first (PAN)" });
+    if (!franchiseeId) {
+      showMessage({ type: "danger", message: "Complete Step 1 first" });
       return false;
     }
 
@@ -395,38 +369,27 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
         Alert.alert("Error", "Missing Aadhaar number");
         return;
       }
-
-      // ensure we have bpcId ready before save
-      if (!bpcId) await maybeGenerateBpcId();
-
-      const r = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, {
-        territoryHeadId,
-        // NEW: persist codes
-        bpcId,                 // new key kept for clarity in UI/CRM
-        bpc: bpcId,            // stored under `bpc` as well (dashboards already use `bpc`)
-        // keep existing fields
-        aadhar_number: aNumRaw,
-        register_business_address: {
-          street: formData.register_street || "",
-          city: formData.register_city || "",
-          state: formData.register_state || "",
-          country: formData.register_country || "India",
-          postalCode: formData.register_postalCode || "",
-        },
-        // (Optional) also store short codes – helpful for CRM joins
-        stateCode: to2(formData.register_state),
-        cityCode: to2(formData.register_city),
-        joinedDate: new Date().toISOString(), // useful default
+      const r = await stepByKey({
+          franchiseeId,
+          aadhar_number: aNumRaw,
+          register_business_address: {
+            street: formData.register_street || "",
+            city: formData.register_city || "",
+            state: formData.register_state || "",
+            country: formData.register_country || "India",
+            postalCode: formData.register_postalCode || "",
+          },
       });
       const id = r?.data?.data?._id;
-      if (id && !territoryHeadId) {
-        setTerritoryHeadId(id);
-        await AsyncStorage.setItem("territoryHeadId", id);
+      if (id && !franchiseeId) {
+        setFranchiseeId(id);
+        await AsyncStorage.setItem("franchiseeId", id);
       }
       showMessage({
         type: "success",
-        message: "✅ Aadhaar & BPC ID saved!",
+        message: "✅ Aadhaar uploaded successfully!",
       });
+
       setStep(3);
     } catch (e) {
       console.error(e);
@@ -457,6 +420,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       }
     });
   };
+
   const validateStep3 = () => {
     if (!gstFile) {
       showMessage({ type: "danger", message: "Upload GST Certificate" });
@@ -504,7 +468,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
 
     if (!formData.gst_state.trim()) {
-      showMessage({ type: "danger", message: "Enter GST State" });
+      showMessage({ type: "danger", message: "Enter State" });
       return false;
     }
 
@@ -513,14 +477,14 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
 
   const saveGstAndNext = async () => {
     if (!validateStep3()) return;
+
     try {
-      if (!territoryHeadId) {
-        Alert.alert("Error", "Missing territoryHeadId. Complete Step 1 first.");
+      if (!franchiseeId) {
+        Alert.alert("Error", "Missing franchiseeId. Complete Step 1 first.");
         return;
       }
-      setLoadingGST(true);
       const fd = new FormData();
-      fd.append("territoryHeadId", territoryHeadId);
+      fd.append("franchiseeId", franchiseeId);
       if (gstFile) {
         fd.append("document", {
           uri: gstFile.uri,
@@ -536,13 +500,14 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       fd.append("gst_address[street]", formData.gst_street || "");
       fd.append("gst_address[locality]", formData.gst_locality || "");
       fd.append("gst_address[district]", formData.gst_district || "");
-      fd.append("gst_address[state]", formData.gst_state || "");
 
-      const r = await axios.put(`${API_URL}/api/territory-heads/gst`, fd, {
+      setLoadingGST(true);
+      const r = await axios.put(`${API_URL}/api/franchisees/gst`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (!r?.data?.ok) throw new Error(r?.data?.message || "Save failed");
       setStep(4);
+
       showMessage({
         type: "success",
         message: "✅ GST uploaded successfully!",
@@ -589,7 +554,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
   };
   const validateStep4 = () => {
     if (!bankFile) {
-      showMessage({ type: "danger", message: "Upload Cancelled Cheque or Bank Letter" });
+      showMessage({ type: "danger", message: "Upload Cancelled Cheque or Bank Proof" });
       return false;
     }
 
@@ -628,36 +593,37 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
 
   const saveBankDetails = async () => {
     if (!validateStep4()) return;
-    const tid = territoryHeadId || (await AsyncStorage.getItem("territoryHeadId"));
-    if (!tid) {
-      Alert.alert("Error", "Territory Head ID is required. Complete earlier steps first.");
+    const fid = franchiseeId || (await AsyncStorage.getItem("franchiseeId"));
+    if (!fid) {
+      Alert.alert("Error", "Franchisee ID is required. Complete earlier steps first.");
       return;
     }
-    try {
-      const fd = new FormData();
-      if (bankFile) {
-        fd.append("document", {
-          uri: bankFile.uri,
-          type: bankFile.type || "image/jpeg",
-          name: bankFile.name,
-        });
-      }
-      fd.append("account_holder_name", bankData.account_holder_name || "");
-      fd.append("account_no", bankData.account_no || "");
-      fd.append("ifcs_code", (bankData.ifcs_code || "").toUpperCase());
-      fd.append("bank_name", bankData.bank_name || "");
-      fd.append("branch_name", bankData.branch_name || "");
-      fd.append("bank_address", bankData.bank_address || "");
+    const fd = new FormData();
+    if (bankFile) {
+      fd.append("document", {
+        uri: bankFile.uri,
+        type: bankFile.type || "image/jpeg",
+        name: bankFile.name,
+      });
+    }
+    fd.append("account_holder_name", bankData.account_holder_name || "");
+    fd.append("account_no", bankData.account_no || "");
+    fd.append("ifcs_code", (bankData.ifcs_code || "").toUpperCase());
+    fd.append("bank_name", bankData.bank_name || "");
+    fd.append("branch_name", bankData.branch_name || "");
+    fd.append("bank_address", bankData.bank_address || "");
 
-      const response = await axios.put(`${API_URL}/api/territory-heads/${tid}/bank`, fd, {
+    try {
+      const response = await axios.put(`${API_URL}/api/franchisees/${fid}/bank`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (!response?.data?.ok)
         throw new Error(response?.data?.message || "Save failed");
       showMessage({
         type: "success",
-        message: "✅ Bank uploaded successfully!",
+        message: "✅Bank details saved successfully.",
       });
+
       setStep(5);
     } catch (error) {
       console.error("Error saving bank details:", error);
@@ -705,38 +671,42 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
   };
 
   const fetchLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          setOutlet((prev) => ({ ...prev, lat: String(latitude), lng: String(longitude) }));
-          Alert.alert(
-            "Location Fetched",
-            `Latitude: ${latitude}, Longitude: ${longitude}`
-          );
-        },
-        (error) => {
-          console.error("Error fetching location:", error);
-          Alert.alert("Error", "Failed to fetch location. Please enable location services.");
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-      );
-    } else {
-      Alert.alert("Error", "Geolocation is not supported on this device.");
-    }
+    // Note: For React Native, you need to install and use @react-native-community/geolocation
+    // For now, showing an alert to manually enter coordinates
+    Alert.alert(
+      "Location",
+      "Please enter latitude and longitude manually, or install @react-native-community/geolocation for automatic location detection.",
+      [{ text: "OK" }]
+    );
+    // Uncomment below when geolocation is installed:
+    // import Geolocation from '@react-native-community/geolocation';
+    // Geolocation.getCurrentPosition(
+    //   (position) => {
+    //     const { latitude, longitude } = position.coords;
+    //     setOutlet((prev) => ({ ...prev, lat: String(latitude), lng: String(longitude) }));
+    //     Alert.alert("Location Fetched", `Latitude: ${latitude}, Longitude: ${longitude}`);
+    //   },
+    //   (error) => {
+    //     console.error("Error fetching location:", error);
+    //     Alert.alert("Error", "Failed to fetch location. Please enable location services.");
+    //   },
+    //   { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    // );
   };
 
-  const submitTerritoryApplication = async () => {
-    const tid = territoryHeadId || (await AsyncStorage.getItem("territoryHeadId"));
-    if (!tid) {
-      Alert.alert("Error", "Missing territoryHeadId");
+  // ============ NEW: final submit helper ============
+  const submitFranchiseApplication = async () => {
+    const fid = franchiseeId || (await AsyncStorage.getItem("franchiseeId"));
+    if (!fid) {
+      Alert.alert("Error", "Missing franchiseeId");
       return;
     }
-    const r = await axios.post(`${API_URL}/api/territory-heads/register`, {
-      territoryHeadId: tid,
+    const r = await axios.post(`${API_URL}/api/franchisees/submit`, {
+      franchiseeId: fid,
     });
     if (!r?.data?.ok) throw new Error(r?.data?.message || "Submit failed");
   };
+  // ===================================================
   const validateStep5 = () => {
     if (!outlet.outlet_name.trim()) {
       showMessage({ type: "danger", message: "Enter Outlet Name" });
@@ -759,12 +729,12 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
 
     if (!outlet.street.trim()) {
-      showMessage({ type: "danger", message: "Enter Street" });
+      showMessage({ type: "danger", message: "Enter Outlet Street" });
       return false;
     }
 
     if (!outlet.city.trim()) {
-      showMessage({ type: "danger", message: "Enter City" });
+      showMessage({ type: "danger", message: "Enter Outlet City" });
       return false;
     }
 
@@ -784,7 +754,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
 
     if (!outlet.lat || !outlet.lng) {
-      showMessage({ type: "danger", message: "Location Required — Click 'Use current location'" });
+      showMessage({ type: "danger", message: "Location Required — Use GPS button" });
       return false;
     }
 
@@ -798,74 +768,63 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
 
   const saveOutletAndFinish = async () => {
     if (!validateStep5()) return;
-    const tid = territoryHeadId || (await AsyncStorage.getItem("territoryHeadId"));
-    if (!tid) {
-      Alert.alert("Error", "Missing territoryHeadId. Complete earlier steps first.");
+    const fid = franchiseeId || (await AsyncStorage.getItem("franchiseeId"));
+    if (!fid) {
+      Alert.alert("Error", "Missing franchiseeId. Complete earlier steps first.");
       return;
     }
 
-    try {
-      const fd = new FormData();
-      fd.append("territoryHeadId", tid);
-      fd.append("outlet_name", outlet.outlet_name);
-      fd.append("outlet_manager_name", outlet.manager_name);
-      fd.append("outlet_contact_no", outlet.manager_mobile);
-      fd.append("outlet_phone_no", outlet.outlet_phone);
-      fd.append("outlet_location[street]", outlet.street);
-      fd.append("outlet_location[city]", outlet.city);
-      fd.append("outlet_location[district]", outlet.district);
-      fd.append("outlet_location[state]", outlet.state);
-      fd.append("outlet_location[country]", outlet.country || "India");
-      fd.append("outlet_location[postalCode]", outlet.postalCode);
-      if (outlet.lat) fd.append("outlet_coords[lat]", outlet.lat);
-      if (outlet.lng) fd.append("outlet_coords[lng]", outlet.lng);
-      if (outletImage) {
-        fd.append("outlet_nameboard_image", {
-          uri: outletImage.uri,
-          type: outletImage.type || "image/jpeg",
-          name: outletImage.name,
-        });
-      }
-
-      const r = await axios.put(`${API_URL}/api/territory-heads/outlet`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
+    const fd = new FormData();
+    fd.append("franchiseeId", fid);
+    fd.append("outlet_name", outlet.outlet_name);
+    fd.append("outlet_manager_name", outlet.manager_name);
+    fd.append("outlet_contact_no", outlet.manager_mobile);
+    fd.append("outlet_phone_no", outlet.outlet_phone);
+    fd.append("outlet_location[street]", outlet.street);
+    fd.append("outlet_location[city]", outlet.city);
+    fd.append("outlet_location[district]", outlet.district);
+    fd.append("outlet_location[state]", outlet.state);
+    fd.append("outlet_location[country]", outlet.country || "India");
+    fd.append("outlet_location[postalCode]", outlet.postalCode);
+    if (outlet.lat) fd.append("outlet_coords[lat]", outlet.lat);
+    if (outlet.lng) fd.append("outlet_coords[lng]", outlet.lng);
+    if (outletImage) {
+      fd.append("outlet_nameboard_image", {
+        uri: outletImage.uri,
+        type: outletImage.type || "image/jpeg",
+        name: outletImage.name,
       });
-
-      if (!r?.data?.ok) throw new Error(r?.data?.message || "Save failed");
-      showMessage({
-        type: "success",
-        message: "✅ Outlet uploaded successfully!",
-      });
-
-      console.log("Territory Head submit id:", tid);
-
-      try {
-        await submitTerritoryApplication();
-      } catch (e) {
-        console.error(e);
-        Alert.alert("Error", e?.response?.data?.message || e.message || "Submit failed");
-        return;
-      }
-      await AsyncStorage.removeItem("territoryHeadId");
-      await AsyncStorage.removeItem("bpcId");
-      Alert.alert(
-        "Success!",
-        "Your territory head application has been submitted successfully. We will review it and get back to you soon.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              if (safeNavigation && safeNavigation.goBack) {
-                safeNavigation.goBack();
-              }
-            },
-          },
-        ]
-      );
-    } catch (e) {
-      console.error(e);
-      Alert.alert("Error", e?.response?.data?.message || e.message || "Save failed");
     }
+
+    const r = await axios.put(`${API_URL}/api/franchisees/outlet`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    if (!r?.data?.ok) throw new Error(r?.data?.message || "Save failed");
+
+    showMessage({
+      type: "success",
+      message: "✅Outlet details saved!",
+    });
+
+    // ============ NEW: call final submit before redirect ============
+    await submitFranchiseApplication();
+    // ===============================================================
+
+    Alert.alert(
+      "Success!",
+      "Your franchisee application has been submitted successfully. We will review it and get back to you soon.",
+      [
+        {
+          text: "OK",
+          onPress: () => {
+            if (safeNavigation && safeNavigation.goBack) {
+              safeNavigation.goBack();
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Handle date picker change
@@ -882,7 +841,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Territory Head Owner Registration</Text>
+      <Text style={styles.title}>Franchisee Owner Registration</Text>
       <View style={styles.stepIndicator}>
         <Text style={styles.stepText}>Step {step} of 5</Text>
       </View>
@@ -995,40 +954,6 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
           </TouchableOpacity>
           <Text style={styles.stepTitle}>Step 2: Aadhaar Details</Text>
 
-          <View style={styles.uploadSection}>
-            <Text style={styles.label}>Upload Aadhaar Front</Text>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={onAadhaarFront}
-              disabled={loadingAFront}
-            >
-              <Text style={styles.uploadButtonText}>Choose File</Text>
-            </TouchableOpacity>
-            {loadingAFront && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#008080" />
-                <Text>Uploading…</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.uploadSection}>
-            <Text style={styles.label}>Upload Aadhaar Back</Text>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={onAadhaarBack}
-              disabled={loadingABack}
-            >
-              <Text style={styles.uploadButtonText}>Choose File</Text>
-            </TouchableOpacity>
-            {loadingABack && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#008080" />
-                <Text>Uploading…</Text>
-              </View>
-            )}
-          </View>
-
           <View style={styles.row}>
             <View style={styles.col}>
               <Text style={styles.label}>First Name</Text>
@@ -1135,17 +1060,38 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>BPC ID (Auto)</Text>
-            <TextInput
-              style={[styles.input, styles.readOnlyInput]}
-              value={bpcId}
-              editable={false}
-              placeholder="Auto-generated"
-            />
-            <Text style={styles.helperText}>
-              Format: TH{`{STATE}`}{`{CITY}`}{`{DDMMYY}`}{`{NNNNN}`}
-            </Text>
+          <View style={styles.uploadSection}>
+            <Text style={styles.label}>Upload Aadhaar Front</Text>
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={onAadhaarFront}
+              disabled={loadingAFront}
+            >
+              <Text style={styles.uploadButtonText}>Choose File</Text>
+            </TouchableOpacity>
+            {loadingAFront && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#008080" />
+                <Text>Uploading…</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.uploadSection}>
+            <Text style={styles.label}>Upload Aadhaar Back</Text>
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={onAadhaarBack}
+              disabled={loadingABack}
+            >
+              <Text style={styles.uploadButtonText}>Choose File</Text>
+            </TouchableOpacity>
+            {loadingABack && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#008080" />
+                <Text>Uploading…</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.buttonContainer}>
@@ -1166,6 +1112,22 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
           </TouchableOpacity>
           <Text style={styles.stepTitle}>Step 3: GST Details</Text>
 
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>GST Number</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.gstNumber}
+              onChangeText={(text) =>
+                setFormData((p) => ({
+                  ...p,
+                  gstNumber: text.toUpperCase(),
+                }))
+              }
+              placeholder="Enter GST Number"
+              autoCapitalize="characters"
+            />
+          </View>
+
           <View style={styles.uploadSection}>
             <Text style={styles.label}>Upload GST Certificate</Text>
             <TouchableOpacity
@@ -1181,22 +1143,6 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
                 <Text>Saving GST…</Text>
               </View>
             )}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>GST Number</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.gstNumber}
-              onChangeText={(text) =>
-                setFormData((p) => ({
-                  ...p,
-                  gstNumber: text.toUpperCase(),
-                }))
-              }
-              placeholder="Enter GST Number"
-              autoCapitalize="characters"
-            />
           </View>
 
           <View style={styles.inputGroup}>
@@ -1326,18 +1272,6 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
           </TouchableOpacity>
           <Text style={styles.stepTitle}>Step 4: Bank Details</Text>
 
-          <View style={styles.uploadSection}>
-            <Text style={styles.label}>
-              Upload Cancelled Cheque or Bank Letter
-            </Text>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={onBankFileChange}
-            >
-              <Text style={styles.uploadButtonText}>Choose File</Text>
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.row}>
             <View style={styles.col}>
               <Text style={styles.label}>Account Holder Name</Text>
@@ -1423,6 +1357,18 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
             </View>
           </View>
 
+          <View style={styles.uploadSection}>
+            <Text style={styles.label}>
+              Upload Cancelled Cheque or Bank Letter
+            </Text>
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={onBankFileChange}
+            >
+              <Text style={styles.uploadButtonText}>Choose File</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={styles.saveButton}
@@ -1497,8 +1443,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
             <Text style={styles.label}>Address</Text>
             <TextInput
               style={styles.input}
-              placeholder="Street"
-              value={outlet.street}
+                placeholder="Street"
+                value={outlet.street}
               onChangeText={(text) =>
                 setOutlet((p) => ({ ...p, street: text }))
               }
@@ -1507,8 +1453,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
               <View style={[styles.col, { flex: 1 }]}>
                 <TextInput
                   style={styles.input}
-                  placeholder="City"
-                  value={outlet.city}
+                    placeholder="City"
+                    value={outlet.city}
                   onChangeText={(text) =>
                     setOutlet((p) => ({ ...p, city: text }))
                   }
@@ -1517,8 +1463,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
               <View style={[styles.col, { flex: 1 }]}>
                 <TextInput
                   style={styles.input}
-                  placeholder="District"
-                  value={outlet.district}
+                    placeholder="District"
+                    value={outlet.district}
                   onChangeText={(text) =>
                     setOutlet((p) => ({ ...p, district: text }))
                   }
@@ -1527,8 +1473,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
               <View style={[styles.col, { flex: 1 }]}>
                 <TextInput
                   style={styles.input}
-                  placeholder="State"
-                  value={outlet.state}
+                    placeholder="State"
+                    value={outlet.state}
                   onChangeText={(text) =>
                     setOutlet((p) => ({ ...p, state: text }))
                   }
@@ -1539,8 +1485,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
               <View style={[styles.col, { flex: 1 }]}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Country"
-                  value={outlet.country}
+                    placeholder="Country"
+                    value={outlet.country}
                   onChangeText={(text) =>
                     setOutlet((p) => ({ ...p, country: text }))
                   }
@@ -1549,8 +1495,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
               <View style={[styles.col, { flex: 1 }]}>
                 <TextInput
                   style={styles.input}
-                  placeholder="PIN"
-                  value={outlet.postalCode}
+                    placeholder="PIN"
+                    value={outlet.postalCode}
                   onChangeText={(text) =>
                     setOutlet((p) => ({ ...p, postalCode: text }))
                   }
@@ -1688,16 +1634,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: "#fff",
     marginBottom: 12,
-  },
-  readOnlyInput: {
-    backgroundColor: "#f0f0f0",
-    color: "#666",
-  },
-  helperText: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: -8,
-    marginBottom: 8,
   },
   textArea: {
     minHeight: 100,

@@ -1,18 +1,24 @@
-import React from "react";
-import { View, TouchableOpacity, Text, StyleSheet, Image } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, TouchableOpacity, Text, StyleSheet, Image, ActivityIndicator } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import FlashMessage from "react-native-flash-message";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import BBSCARTLOGO from "./src/assets/images/bbscart-logo.png";
 
 // ---------- Screens ----------
 import Home from "./src/screens/Home";
 import Dashboard from "./src/screens/Dashboard";
 import FranchiseHeadScreen from "./src/screens/FranchiseHeadScreen";
+import Franchisee from "./src/screens/Franchisee";
 import TerritoryHead from "./src/screens/TerritoryHead";
 import AgentScreen from "./src/screens/AgentScreen";
+import AgentForm from "./src/screens/AgentForm";
 import VendorScreen from "./src/screens/VendorScreen";
+import VendorForm from "./src/screens/VendorForm";
 import BecomeVendorScreen from "./src/screens/BecomeVendorScreen";
+import CustomerBVendor from "./src/screens/CustomerBVendor";
 import ProfileSettingsScreen from "./src/screens/ProfileSettings";
 import CartPage from "./src/screens/CartScreen";
 import ProductListings from "./src/screens/ProductListings";
@@ -32,6 +38,8 @@ import SavedCardsUPI from "./src/screens/SavedCardsUPI";
 import RewardsScreen from "./src/screens/RewardsScreen";
 import ResetPasswordFlow from "./src/screens/ResetPassword";
 import ContactUsScreen from "./src/screens/ContactUsScreen";
+import FeedbackScreen from "./src/screens/FeedbackScreen";
+import AppSettingsScreen from "./src/screens/AppSettingsScreen";
 // ---------- Context ----------
 import ChangePassword from "./src/screens/ChangePasswordScreen";
 import TermsOfUse from "./src/screens/TermsOfUseScreen";
@@ -102,9 +110,9 @@ function HeaderIcons({ navigation }) {
 }
 
 /* ---------------- AUTH STACK ---------------- */
-function AuthStack() {
+function AuthStack({ showIntro }) {
   return (
-    <Stack.Navigator initialRouteName="Intro">
+    <Stack.Navigator initialRouteName={showIntro ? "Intro" : "SignIn"}>
       <Stack.Screen
         name="Intro"
         component={IntroScreen}
@@ -172,16 +180,21 @@ function MainStack() {
       />
       <Stack.Screen name="Dashboard" component={Dashboard} />
       <Stack.Screen name="FranchiseHead" component={FranchiseHeadScreen} />
+      <Stack.Screen name="Franchisee" component={Franchisee} />
       <Stack.Screen name="TerritoryHead" component={TerritoryHead} />
       <Stack.Screen name="Agent" component={AgentScreen} />
+      <Stack.Screen name="AgentForm" component={AgentForm} />
       <Stack.Screen name="Vendor" component={VendorScreen} />
+      <Stack.Screen name="VendorForm" component={VendorForm} />
       <Stack.Screen name="BecomeAVendor" component={BecomeVendorScreen} />
+      <Stack.Screen name="CustomerBVendor" component={CustomerBVendor} />
       <Stack.Screen name="UserAccount" component={UserAccount} />
       <Stack.Screen name="Cart" component={CartPage} />
       <Stack.Screen name="Notifications" component={Notifications} />
       <Stack.Screen name="Products" component={ProductListings} />
       <Stack.Screen name="ProductDetails" component={ProductDetails} />
       <Stack.Screen name="ProfileSettings" component={ProfileSettingsScreen} />
+      <Stack.Screen name="Settings" component={AppSettingsScreen} />
       <Stack.Screen name="Checkout" component={CheckoutPage} />
       <Stack.Screen name="Success" component={SuccessPage} />
       <Stack.Screen name="Orders" component={OrderHistory} />
@@ -191,6 +204,7 @@ function MainStack() {
       <Stack.Screen name="Payments" component={SavedCardsUPI} />
       <Stack.Screen name="Rewards" component={RewardsScreen} />
       <Stack.Screen name="ContactUs" component={ContactUsScreen} />
+      <Stack.Screen name="Feedback" component={FeedbackScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePassword} />
       <Stack.Screen name="TermsOfUse" component={TermsOfUse} />
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
@@ -207,8 +221,43 @@ function MainStack() {
 
 /* ---------------- ROOT NAVIGATOR ---------------- */
 function RootNavigator() {
-  const { isLoggedIn } = useAuth();
-  return isLoggedIn ? <MainStack /> : <AuthStack />;
+  const { isLoggedIn, loading: authLoading } = useAuth();
+  const [isFirstLaunch, setIsFirstLaunch] = useState(null);
+  const [checkingFirstLaunch, setCheckingFirstLaunch] = useState(true);
+
+  useEffect(() => {
+    const checkFirstLaunch = async () => {
+      try {
+        const hasLaunched = await AsyncStorage.getItem("hasLaunched");
+        if (hasLaunched === null) {
+          // First launch - show intro
+          setIsFirstLaunch(true);
+          await AsyncStorage.setItem("hasLaunched", "true");
+        } else {
+          // Not first launch - skip intro
+          setIsFirstLaunch(false);
+        }
+      } catch (error) {
+        console.log("Error checking first launch:", error);
+        setIsFirstLaunch(false);
+      } finally {
+        setCheckingFirstLaunch(false);
+      }
+    };
+
+    checkFirstLaunch();
+  }, []);
+
+  // Show loading while checking first launch and auth status
+  if (checkingFirstLaunch || authLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+        <ActivityIndicator size="large" color="#008080" />
+      </View>
+    );
+  }
+
+  return isLoggedIn ? <MainStack /> : <AuthStack showIntro={isFirstLaunch} />;
 }
 
 /* ---------------- APP ROOT ---------------- */
@@ -220,6 +269,7 @@ export default function App() {
           <NavigationContainer>
             <RootNavigator />
           </NavigationContainer>
+          <FlashMessage position="top" />
         </WishlistProvider>
       </CartProvider>
     </AuthProvider>

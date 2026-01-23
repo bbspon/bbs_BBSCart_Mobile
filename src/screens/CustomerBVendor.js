@@ -22,7 +22,6 @@ import { useNavigation } from "@react-navigation/native";
 const API_URL = "https://bbscart.com";
 
 // Real API functions - replaced mock functions
-// Options
 const constitutionOptions = [
   { value: "proprietorship", label: "Proprietorship" },
   { value: "partnership", label: "Partnership" },
@@ -33,34 +32,7 @@ const constitutionOptions = [
   { value: "society", label: "Society" },
 ];
 
-/** ------------------------------
- * BPC ID generator helpers
- * TH{STATE}{CITY}{DDMMYY}{NNNNN}
- * STATE = first 2 letters of register_state (uppercased, A–Z only)
- * CITY  = first 2 letters of register_city  (uppercased, A–Z only)
- * DATE  = today DDMMYY
- * NNNNN = from backend /next-seq if present; else fallback (stable per day)
- * ------------------------------ */
-const to2 = (txt = "") => (txt.replace(/[^A-Za-z]/g, "").toUpperCase() + "XX").slice(0, 2);
-const pad5 = (n) => String(Math.max(0, Number(n) || 0)).padStart(5, "0");
-const todayDDMMYY = () => {
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yy = String(d.getFullYear()).slice(-2);
-  return `${dd}${mm}${yy}`;
-};
-/** fallback run-number that’s deterministic for a given (state, city, date) */
-const fallbackRun = (state2, city2, ddmmyy) => {
-  const seed = `${state2}${city2}${ddmmyy}`;
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-  return pad5((hash % 99999) + 1);
-};
-
-export default function TerritoryHeadForm({ navigation: propNavigation }) {
+export default function CustomerBecomeVendorForm({ navigation: propNavigation }) {
   // Use navigation from hook or prop
   const hookNavigation = useNavigation();
   const safeNavigation = propNavigation || hookNavigation || {
@@ -73,29 +45,22 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
   };
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [dobValue, setDobValue] = useState(null);
-
   const [step, setStep] = useState(1);
-  const [territoryHeadId, setTerritoryHeadId] = useState("");
+  const [customerBecomeVendorId, setCustomerBecomeVendorId] = useState("");
 
-  // NEW: store generated BPC ID and show in UI (Step 2)
-  const [bpcId, setBpcId] = useState("");
-
-  // Load territoryHeadId and bpcId from AsyncStorage on mount
+  // Load customerBecomeVendorId from AsyncStorage on mount
   useEffect(() => {
-    const loadData = async () => {
+    const loadId = async () => {
       try {
-        const id = await AsyncStorage.getItem("territoryHeadId");
-        if (id) setTerritoryHeadId(id);
-        const storedBpc = await AsyncStorage.getItem("bpcId");
-        if (storedBpc) setBpcId(storedBpc);
+        const id = await AsyncStorage.getItem("customerBecomeVendorId");
+        if (id) setCustomerBecomeVendorId(id);
       } catch (error) {
-        console.error("Error loading data:", error);
+        console.error("Error loading customerBecomeVendorId:", error);
       }
     };
-    loadData();
+    loadId();
   }, []);
 
-  // Loading flags for uploads/saves
   const [loadingPan, setLoadingPan] = useState(false);
   const [loadingAFront, setLoadingAFront] = useState(false);
   const [loadingABack, setLoadingABack] = useState(false);
@@ -113,7 +78,6 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     register_state: "",
     register_country: "India",
     register_postalCode: "",
-    // GST manual fields
     gstNumber: "",
     gstLegalName: "",
     constitution_of_business: "",
@@ -124,6 +88,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     gst_district: "",
     gst_state: "",
   });
+
 
   const fmtAadhaarUI = (digits) =>
     (digits || "")
@@ -140,7 +105,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
         type: fileType || "image/jpeg",
         name: fileName || "document.jpg",
       });
-      const { data } = await axios.post(`${API_URL}/api/territory-heads/upload`, fd, {
+      const { data } = await axios.post(`${API_URL}/api/customer-become-vendors/upload`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (!data?.ok || !data?.fileUrl) throw new Error("Upload failed");
@@ -151,7 +116,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
   };
 
-  // -------------------- PAN (Step 1) --------------------
+  // Step 1: PAN
   const onPanUpload = async () => {
     const options = {
       mediaType: "photo",
@@ -170,16 +135,16 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       setLoadingPan(true);
       try {
         const fileUrl = await uploadDoc(asset.uri, asset.fileName, asset.type);
-        const r = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, {
-          territoryHeadId,
+        const r = await axios.post(`${API_URL}/api/customer-become-vendors/step-by-key`, {
+          customerBecomeVendorId,
           pan_pic: fileUrl,
         });
-        console.log("Territory Head submit response:", r.data);
+        console.log("CBV submit response:", r.data);
 
         const id = r?.data?.data?._id;
-        if (id && !territoryHeadId) {
-          setTerritoryHeadId(id);
-          await AsyncStorage.setItem("territoryHeadId", id);
+        if (id && !customerBecomeVendorId) {
+          setCustomerBecomeVendorId(id);
+          await AsyncStorage.setItem("customerBecomeVendorId", id);
         }
       } catch (err) {
         console.error(err);
@@ -189,28 +154,37 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       }
     });
   };
+  const submitCustomerVendorApplication = async () => {
+    const cid =
+      customerBecomeVendorId || (await AsyncStorage.getItem("customerBecomeVendorId"));
+    if (!cid) {
+      Alert.alert("Error", "Missing customerBecomeVendorId");
+      return;
+    }
+    const r = await axios.post(`${API_URL}/api/customer-become-vendors/register`, {
+      customerBecomeVendorId: cid,
+    });
+    if (!r?.data?.ok) throw new Error(r?.data?.message || "Submit failed");
+  };
   const validateStep1 = () => {
     if (!formData.firstName.trim()) {
       showMessage({ type: "danger", message: "Enter First Name" });
       return false;
     }
-
     if (!formData.lastName.trim()) {
       showMessage({ type: "danger", message: "Enter Last Name" });
       return false;
     }
-
     if (!dobValue) {
       showMessage({ type: "danger", message: "Select Date of Birth" });
       return false;
     }
-
     if (!formData.panNumber.trim()) {
       showMessage({ type: "danger", message: "Enter PAN Number" });
       return false;
     }
 
-    if (!territoryHeadId) {
+    if (!customerBecomeVendorId) {
       showMessage({ type: "danger", message: "Upload PAN Card before continuing" });
       return false;
     }
@@ -222,18 +196,18 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     if (!validateStep1()) return;
     try {
       const payload = {
-        territoryHeadId,
+        customerBecomeVendorId,
         pan_number: (formData.panNumber || "").toUpperCase(),
         vendor_fname: formData.firstName || "",
         vendor_lname: formData.lastName || "",
-        dob: dobValue ? dobValue.toISOString().split("T")[0] : "",
+        dob: formData.dob || "",
       };
-      const resp = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, payload);
+      const resp = await axios.post(`${API_URL}/api/customer-become-vendors/step-by-key`, payload);
       if (!resp?.data?.ok) throw new Error("Save failed");
       const id = resp?.data?.data?._id;
       if (id) {
-        setTerritoryHeadId(id);
-        await AsyncStorage.setItem("territoryHeadId", id);
+        setCustomerBecomeVendorId(id);
+        await AsyncStorage.setItem("customerBecomeVendorId", id);
       }
       setStep(2);
       showMessage({
@@ -246,7 +220,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
   };
 
-  // -------------------- Aadhaar (Step 2) --------------------
+  // Step 2: Aadhaar
   const onAadhaarFront = async () => {
     const options = {
       mediaType: "photo",
@@ -265,14 +239,14 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       setLoadingAFront(true);
       try {
         const fileUrl = await uploadDoc(asset.uri, asset.fileName, asset.type);
-        const r = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, {
-          territoryHeadId,
+        const r = await axios.post(`${API_URL}/api/customer-become-vendors/step-by-key`, {
+          customerBecomeVendorId,
           aadhar_pic_front: fileUrl,
         });
         const id = r?.data?.data?._id;
-        if (id && !territoryHeadId) {
-          setTerritoryHeadId(id);
-          await AsyncStorage.setItem("territoryHeadId", id);
+        if (id && !customerBecomeVendorId) {
+          setCustomerBecomeVendorId(id);
+          await AsyncStorage.setItem("customerBecomeVendorId", id);
         }
       } catch (err) {
         console.error(err);
@@ -301,14 +275,14 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       setLoadingABack(true);
       try {
         const fileUrl = await uploadDoc(asset.uri, asset.fileName, asset.type);
-        const r = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, {
-          territoryHeadId,
+        const r = await axios.post(`${API_URL}/api/customer-become-vendors/step-by-key`, {
+          customerBecomeVendorId,
           aadhar_pic_back: fileUrl,
         });
         const id = r?.data?.data?._id;
-        if (id && !territoryHeadId) {
-          setTerritoryHeadId(id);
-          await AsyncStorage.setItem("territoryHeadId", id);
+        if (id && !customerBecomeVendorId) {
+          setCustomerBecomeVendorId(id);
+          await AsyncStorage.setItem("customerBecomeVendorId", id);
         }
       } catch (err) {
         console.error(err);
@@ -318,43 +292,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       }
     });
   };
-
-  /** NEW: Generate bpcId as soon as we have City/State (Step 2) */
-  const maybeGenerateBpcId = async () => {
-    const state2 = to2(formData.register_state);
-    const city2 = to2(formData.register_city);
-    if (!state2.trim() || !city2.trim()) return;
-
-    const ddmmyy = todayDDMMYY();
-
-    // Try server counter first (recommended). Fallback if not present.
-    let run = "";
-    try {
-      const url = `${API_URL}/api/territory-heads/next-seq?state=${encodeURIComponent(
-        state2
-      )}&city=${encodeURIComponent(city2)}&date=${encodeURIComponent(ddmmyy)}`;
-      const r = await axios.get(url);
-      // expect { ok:true, next: 12 } or { next:"00012" }
-      const next = r?.data?.next;
-      run = typeof next === "number" ? pad5(next) : pad5(next);
-    } catch {
-      run = fallbackRun(state2, city2, ddmmyy);
-    }
-
-    const code = `TH${state2}${city2}${ddmmyy}${run}`;
-    setBpcId(code);
-    await AsyncStorage.setItem("bpcId", code);
-  };
-
-  /** Auto-generate when state/city changes (Step 2 screen) */
-  useEffect(() => {
-    if (step === 2) {
-      maybeGenerateBpcId();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, formData.register_state, formData.register_city]);
   const validateStep2 = () => {
-    if (!territoryHeadId) {
+    if (!customerBecomeVendorId) {
       showMessage({ type: "danger", message: "Complete Step 1 first (PAN)" });
       return false;
     }
@@ -395,16 +334,8 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
         Alert.alert("Error", "Missing Aadhaar number");
         return;
       }
-
-      // ensure we have bpcId ready before save
-      if (!bpcId) await maybeGenerateBpcId();
-
-      const r = await axios.post(`${API_URL}/api/territory-heads/step-by-key`, {
-        territoryHeadId,
-        // NEW: persist codes
-        bpcId,                 // new key kept for clarity in UI/CRM
-        bpc: bpcId,            // stored under `bpc` as well (dashboards already use `bpc`)
-        // keep existing fields
+      const r = await axios.post(`${API_URL}/api/customer-become-vendors/step-by-key`, {
+        customerBecomeVendorId,
         aadhar_number: aNumRaw,
         register_business_address: {
           street: formData.register_street || "",
@@ -413,20 +344,17 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
           country: formData.register_country || "India",
           postalCode: formData.register_postalCode || "",
         },
-        // (Optional) also store short codes – helpful for CRM joins
-        stateCode: to2(formData.register_state),
-        cityCode: to2(formData.register_city),
-        joinedDate: new Date().toISOString(), // useful default
       });
       const id = r?.data?.data?._id;
-      if (id && !territoryHeadId) {
-        setTerritoryHeadId(id);
-        await AsyncStorage.setItem("territoryHeadId", id);
+      if (id && !customerBecomeVendorId) {
+        setCustomerBecomeVendorId(id);
+        await AsyncStorage.setItem("customerBecomeVendorId", id);
       }
       showMessage({
         type: "success",
-        message: "✅ Aadhaar & BPC ID saved!",
+        message: "✅ Aadhaar uploaded successfully!",
       });
+
       setStep(3);
     } catch (e) {
       console.error(e);
@@ -434,7 +362,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
   };
 
-  // -------------------- GST (Step 3 — manual; file optional) --------------------
+  // Step 3: GST
   const [gstFile, setGstFile] = useState(null);
   const onGstFileSelect = () => {
     const options = {
@@ -489,7 +417,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
 
     if (!formData.gst_street.trim()) {
-      showMessage({ type: "danger", message: "Enter Street" });
+      showMessage({ type: "danger", message: "Enter Street/Road" });
       return false;
     }
 
@@ -504,7 +432,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
 
     if (!formData.gst_state.trim()) {
-      showMessage({ type: "danger", message: "Enter GST State" });
+      showMessage({ type: "danger", message: "Enter State" });
       return false;
     }
 
@@ -514,13 +442,12 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
   const saveGstAndNext = async () => {
     if (!validateStep3()) return;
     try {
-      if (!territoryHeadId) {
-        Alert.alert("Error", "Missing territoryHeadId. Complete Step 1 first.");
+      if (!customerBecomeVendorId) {
+        Alert.alert("Error", "Missing customerBecomeVendorId. Complete Step 1 first.");
         return;
       }
-      setLoadingGST(true);
       const fd = new FormData();
-      fd.append("territoryHeadId", territoryHeadId);
+      fd.append("customerBecomeVendorId", customerBecomeVendorId);
       if (gstFile) {
         fd.append("document", {
           uri: gstFile.uri,
@@ -536,9 +463,9 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       fd.append("gst_address[street]", formData.gst_street || "");
       fd.append("gst_address[locality]", formData.gst_locality || "");
       fd.append("gst_address[district]", formData.gst_district || "");
-      fd.append("gst_address[state]", formData.gst_state || "");
 
-      const r = await axios.put(`${API_URL}/api/territory-heads/gst`, fd, {
+      setLoadingGST(true);
+      const r = await axios.put(`${API_URL}/api/customer-become-vendors/gst`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (!r?.data?.ok) throw new Error(r?.data?.message || "Save failed");
@@ -555,7 +482,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
   };
 
-  // -------------------- Bank Details (Step 4) --------------------
+  // Step 4: Bank
   const [bankFile, setBankFile] = useState(null);
   const [bankData, setBankData] = useState({
     account_holder_name: "",
@@ -628,28 +555,29 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
 
   const saveBankDetails = async () => {
     if (!validateStep4()) return;
-    const tid = territoryHeadId || (await AsyncStorage.getItem("territoryHeadId"));
-    if (!tid) {
-      Alert.alert("Error", "Territory Head ID is required. Complete earlier steps first.");
+    const cid =
+      customerBecomeVendorId || (await AsyncStorage.getItem("customerBecomeVendorId"));
+    if (!cid) {
+      Alert.alert("Error", "Customer ID is required. Complete earlier steps first.");
       return;
     }
-    try {
-      const fd = new FormData();
-      if (bankFile) {
-        fd.append("document", {
-          uri: bankFile.uri,
-          type: bankFile.type || "image/jpeg",
-          name: bankFile.name,
-        });
-      }
-      fd.append("account_holder_name", bankData.account_holder_name || "");
-      fd.append("account_no", bankData.account_no || "");
-      fd.append("ifcs_code", (bankData.ifcs_code || "").toUpperCase());
-      fd.append("bank_name", bankData.bank_name || "");
-      fd.append("branch_name", bankData.branch_name || "");
-      fd.append("bank_address", bankData.bank_address || "");
+    const fd = new FormData();
+    if (bankFile) {
+      fd.append("document", {
+        uri: bankFile.uri,
+        type: bankFile.type || "image/jpeg",
+        name: bankFile.name,
+      });
+    }
+    fd.append("account_holder_name", bankData.account_holder_name || "");
+    fd.append("account_no", bankData.account_no || "");
+    fd.append("ifcs_code", (bankData.ifcs_code || "").toUpperCase());
+    fd.append("bank_name", bankData.bank_name || "");
+    fd.append("branch_name", bankData.branch_name || "");
+    fd.append("bank_address", bankData.bank_address || "");
 
-      const response = await axios.put(`${API_URL}/api/territory-heads/${tid}/bank`, fd, {
+    try {
+      const response = await axios.put(`${API_URL}/api/customer-become-vendors/${cid}/bank`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (!response?.data?.ok)
@@ -658,6 +586,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
         type: "success",
         message: "✅ Bank uploaded successfully!",
       });
+
       setStep(5);
     } catch (error) {
       console.error("Error saving bank details:", error);
@@ -665,7 +594,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
   };
 
-  // -------------------- Outlet Details (Step 5) --------------------
+  // Step 5: Outlet
   const [outlet, setOutlet] = useState({
     outlet_name: "",
     manager_name: "",
@@ -725,18 +654,6 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
       Alert.alert("Error", "Geolocation is not supported on this device.");
     }
   };
-
-  const submitTerritoryApplication = async () => {
-    const tid = territoryHeadId || (await AsyncStorage.getItem("territoryHeadId"));
-    if (!tid) {
-      Alert.alert("Error", "Missing territoryHeadId");
-      return;
-    }
-    const r = await axios.post(`${API_URL}/api/territory-heads/register`, {
-      territoryHeadId: tid,
-    });
-    if (!r?.data?.ok) throw new Error(r?.data?.message || "Submit failed");
-  };
   const validateStep5 = () => {
     if (!outlet.outlet_name.trim()) {
       showMessage({ type: "danger", message: "Enter Outlet Name" });
@@ -784,7 +701,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
     }
 
     if (!outlet.lat || !outlet.lng) {
-      showMessage({ type: "danger", message: "Location Required — Click 'Use current location'" });
+      showMessage({ type: "danger", message: "Fetch location using 'Use current location'" });
       return false;
     }
 
@@ -798,74 +715,72 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
 
   const saveOutletAndFinish = async () => {
     if (!validateStep5()) return;
-    const tid = territoryHeadId || (await AsyncStorage.getItem("territoryHeadId"));
-    if (!tid) {
-      Alert.alert("Error", "Missing territoryHeadId. Complete earlier steps first.");
+    const cid =
+      customerBecomeVendorId || (await AsyncStorage.getItem("customerBecomeVendorId"));
+    if (!cid) {
+      Alert.alert("Error", "Missing customerBecomeVendorId. Complete earlier steps first.");
       return;
     }
 
+    const fd = new FormData();
+    fd.append("customerBecomeVendorId", cid);
+    fd.append("outlet_name", outlet.outlet_name);
+    fd.append("outlet_manager_name", outlet.manager_name);
+    fd.append("outlet_contact_no", outlet.manager_mobile);
+    fd.append("outlet_phone_no", outlet.outlet_phone);
+    fd.append("outlet_location[street]", outlet.street);
+    fd.append("outlet_location[city]", outlet.city);
+    fd.append("outlet_location[district]", outlet.district);
+    fd.append("outlet_location[state]", outlet.state);
+    fd.append("outlet_location[country]", outlet.country || "India");
+    fd.append("outlet_location[postalCode]", outlet.postalCode);
+    if (outlet.lat) fd.append("outlet_coords[lat]", outlet.lat);
+    if (outlet.lng) fd.append("outlet_coords[lng]", outlet.lng);
+    if (outletImage) {
+      fd.append("outlet_nameboard_image", {
+        uri: outletImage.uri,
+        type: outletImage.type || "image/jpeg",
+        name: outletImage.name,
+      });
+    }
+
+    const r = await axios.put(`${API_URL}/api/customer-become-vendors/outlet`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    if (!r?.data?.ok) throw new Error(r?.data?.message || "Save failed");
+    showMessage({
+      type: "success",
+      message: "✅ Outlet uploaded successfully!",
+    });
+
+    console.log(
+      "CBV submit id:",
+      customerBecomeVendorId || (await AsyncStorage.getItem("customerBecomeVendorId"))
+    );
+
     try {
-      const fd = new FormData();
-      fd.append("territoryHeadId", tid);
-      fd.append("outlet_name", outlet.outlet_name);
-      fd.append("outlet_manager_name", outlet.manager_name);
-      fd.append("outlet_contact_no", outlet.manager_mobile);
-      fd.append("outlet_phone_no", outlet.outlet_phone);
-      fd.append("outlet_location[street]", outlet.street);
-      fd.append("outlet_location[city]", outlet.city);
-      fd.append("outlet_location[district]", outlet.district);
-      fd.append("outlet_location[state]", outlet.state);
-      fd.append("outlet_location[country]", outlet.country || "India");
-      fd.append("outlet_location[postalCode]", outlet.postalCode);
-      if (outlet.lat) fd.append("outlet_coords[lat]", outlet.lat);
-      if (outlet.lng) fd.append("outlet_coords[lng]", outlet.lng);
-      if (outletImage) {
-        fd.append("outlet_nameboard_image", {
-          uri: outletImage.uri,
-          type: outletImage.type || "image/jpeg",
-          name: outletImage.name,
-        });
-      }
-
-      const r = await axios.put(`${API_URL}/api/territory-heads/outlet`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      if (!r?.data?.ok) throw new Error(r?.data?.message || "Save failed");
-      showMessage({
-        type: "success",
-        message: "✅ Outlet uploaded successfully!",
-      });
-
-      console.log("Territory Head submit id:", tid);
-
-      try {
-        await submitTerritoryApplication();
-      } catch (e) {
-        console.error(e);
-        Alert.alert("Error", e?.response?.data?.message || e.message || "Submit failed");
-        return;
-      }
-      await AsyncStorage.removeItem("territoryHeadId");
-      await AsyncStorage.removeItem("bpcId");
-      Alert.alert(
-        "Success!",
-        "Your territory head application has been submitted successfully. We will review it and get back to you soon.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              if (safeNavigation && safeNavigation.goBack) {
-                safeNavigation.goBack();
-              }
-            },
-          },
-        ]
-      );
+      await submitCustomerVendorApplication();
     } catch (e) {
       console.error(e);
-      Alert.alert("Error", e?.response?.data?.message || e.message || "Save failed");
+      Alert.alert("Error", e?.response?.data?.message || e.message || "Submit failed");
+      return;
     }
+    await AsyncStorage.removeItem("customerBecomeVendorId");
+    Alert.alert(
+      "Success!",
+      "Your customer become vendor application has been submitted successfully. We will review it and get back to you soon.",
+      [
+        {
+          text: "OK",
+          onPress: () => {
+            if (safeNavigation && safeNavigation.goBack) {
+              safeNavigation.goBack();
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Handle date picker change
@@ -882,7 +797,7 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Territory Head Owner Registration</Text>
+      <Text style={styles.title}>Customer Become Vendor Registration</Text>
       <View style={styles.stepIndicator}>
         <Text style={styles.stepText}>Step {step} of 5</Text>
       </View>
@@ -1133,19 +1048,6 @@ export default function TerritoryHeadForm({ navigation: propNavigation }) {
                 keyboardType="numeric"
               />
             </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>BPC ID (Auto)</Text>
-            <TextInput
-              style={[styles.input, styles.readOnlyInput]}
-              value={bpcId}
-              editable={false}
-              placeholder="Auto-generated"
-            />
-            <Text style={styles.helperText}>
-              Format: TH{`{STATE}`}{`{CITY}`}{`{DDMMYY}`}{`{NNNNN}`}
-            </Text>
           </View>
 
           <View style={styles.buttonContainer}>
@@ -1688,16 +1590,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: "#fff",
     marginBottom: 12,
-  },
-  readOnlyInput: {
-    backgroundColor: "#f0f0f0",
-    color: "#666",
-  },
-  helperText: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: -8,
-    marginBottom: 8,
   },
   textArea: {
     minHeight: 100,

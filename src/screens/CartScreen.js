@@ -61,33 +61,32 @@ export default function CartPage() {
     <View style={styles.itemCard}>
       <Image source={{ uri: item.image }} style={styles.itemImage} />
 
-      <View style={{ flex: 1, marginLeft: 10 }}>
-        <Text style={styles.itemName}>{item.name}</Text>
+      <View style={styles.itemContent}>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{item.name}</Text>
 
-        <View style={styles.priceRow}>
-          <Text style={styles.itemPrice}>₹{item.price}</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.itemPrice}>₹{item.price}</Text>
+          </View>
+
+          <View style={styles.qtyRow}>
+            <TouchableOpacity
+              onPress={() => decreaseQty(item.productId)}
+              style={styles.qtyBtn}
+            >
+              <Text>-</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.qtyText}>{item.qty}</Text>
+
+            <TouchableOpacity
+              onPress={() => increaseQty(item.productId)}
+              style={styles.qtyBtn}
+            >
+              <Text>+</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-
-        <View style={styles.qtyRow}>
-          <TouchableOpacity
-            onPress={() => decreaseQty(item.productId)}
-            style={styles.qtyBtn}
-          >
-            <Text>-</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.qtyText}>{item.qty}</Text>
-
-          <TouchableOpacity
-            onPress={() => increaseQty(item.productId)}
-            style={styles.qtyBtn}
-          >
-            <Text>+</Text>
-          </TouchableOpacity>
-        </View>
-
-      
-      </View>
 
         <View style={styles.actionRow}>
           <TouchableOpacity onPress={() => removeItem(item.productId)}>
@@ -97,15 +96,8 @@ export default function CartPage() {
           <TouchableOpacity onPress={() => saveForLater(item)}>
             <Text style={styles.actionText}>SAVE FOR LATER</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() =>
-              Alert.alert("Buy Now", "Proceeding to checkout…")
-            }
-          >
-            <Text style={styles.actionText}>BUY NOW</Text>
-          </TouchableOpacity>
         </View>
+      </View>
     </View>
   );
 
@@ -190,8 +182,16 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   itemImage: { width: 100, height: 90, borderRadius: 6 },
+  itemContent: {
+    flex: 1,
+    marginLeft: 10,
+    justifyContent: "space-between",
+  },
+  itemInfo: {
+    flex: 1,
+  },
   itemName: { fontSize: 15, fontWeight: "bold", marginBottom: 5 },
-  priceRow: { flexDirection: "row", alignItems: "center" },
+  priceRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   itemPrice: { fontSize: 16, fontWeight: "bold" },
   qtyRow: { flexDirection: "row", alignItems: "center", marginVertical: 4 },
   qtyBtn: {
@@ -204,12 +204,11 @@ const styles = StyleSheet.create({
   qtyText: { marginHorizontal: 10, fontSize: 16 },
   actionRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-    flex: 1,
-    gap: 10,
+    justifyContent: "flex-start",
+    marginTop: 12,
+    gap: 15,
   },
-  actionText: { color: "#2874F0", fontSize: 13 },
+  actionText: { color: "#2874F0", fontSize: 13, fontWeight: "500" },
   savedSection: { backgroundColor: "#fff", marginTop: 10, padding: 10 },
   savedTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 5 },
   summaryCard: {

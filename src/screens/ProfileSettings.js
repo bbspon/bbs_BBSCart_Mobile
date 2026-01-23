@@ -296,7 +296,7 @@ const ProfileSettingsScreen = () => {
   };
 
   const handleChangePassword = () =>
-    Alert.alert('Change Password', 'Password change triggered.');
+    navigation.navigate('ChangePassword');
 
   const handleBiometricLogin = () =>
     Alert.alert('Biometric Login', 'Setup biometric login triggered.');
@@ -475,10 +475,10 @@ const ProfileSettingsScreen = () => {
           <TouchableOpacity onPress={handleSupport}>
             <Text style={styles.actionText}>Help & FAQ</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('ContactUs')}>
             <Text style={styles.actionText}>Contact Support</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Feedback')}>
             <Text style={styles.actionText}>Feedback / Rate App</Text>
           </TouchableOpacity>
         </View>

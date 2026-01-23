@@ -25,6 +25,12 @@ const DashboardScreen = () => {
             <Text style={styles.cardSubtitle}>Track all franchisees under your region</Text>
           </View>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.applyButton}
+          onPress={() => navigation.navigate("Franchisee")}
+        >
+          <Text style={styles.applyButtonText}>Apply</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Territory */}
@@ -39,6 +45,12 @@ const DashboardScreen = () => {
             <Text style={styles.cardTitle}>Territory</Text>
             <Text style={styles.cardSubtitle}>Check sales & operations</Text>
           </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.applyButton}
+          onPress={() => navigation.navigate("TerritoryHead")}
+        >
+          <Text style={styles.applyButtonText}>Apply</Text>
         </TouchableOpacity>
       </View>
 
@@ -55,6 +67,12 @@ const DashboardScreen = () => {
             <Text style={styles.cardSubtitle}>Monitor field activities</Text>
           </View>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.applyButton}
+          onPress={() => navigation.navigate("AgentForm")}
+        >
+          <Text style={styles.applyButtonText}>Apply</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Vendors */}
@@ -69,6 +87,12 @@ const DashboardScreen = () => {
             <Text style={styles.cardTitle}>Vendor Network</Text>
             <Text style={styles.cardSubtitle}>Manage vendor partnerships</Text>
           </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.applyButton}
+          onPress={() => navigation.navigate("VendorForm")}
+        >
+          <Text style={styles.applyButtonText}>Apply</Text>
         </TouchableOpacity>
       </View>
 
@@ -85,21 +109,15 @@ const DashboardScreen = () => {
             <Text style={styles.cardSubtitle}>Join our network of vendors</Text>
           </View>
         </TouchableOpacity>
-      </View>
-
-      {/* Apply Now */}
-      <View style={styles.section}>
         <TouchableOpacity
-          style={styles.card}
-          onPress={() => Linking.openURL('https://bbscart.com/')}
+          style={styles.applyButton}
+          onPress={() => navigation.navigate("CustomerBVendor")}
         >
-          <Text style={styles.emoji}>📝</Text>
-          <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>Apply Now</Text>
-            <Text style={styles.cardSubtitle}>Quick vendor application process</Text>
-          </View>
+          <Text style={styles.applyButtonText}>Apply</Text>
         </TouchableOpacity>
       </View>
+
+
     </ScrollView>
   );
 };
@@ -161,6 +179,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#777",
     marginTop: 4,
+  },
+  applyButton: {
+    backgroundColor: "#008080",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  applyButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 

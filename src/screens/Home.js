@@ -17,7 +17,7 @@ import {
   Modal,
   ActivityIndicator
 } from 'react-native';
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 import BBSCARTLOGO from "../assets/images/bbscart-logo.png";
 import CategoryMenu from './CategoryMenu';
 import DeliverToModal from '../screens/DeliverToModal';
@@ -278,17 +278,29 @@ const TrustItem = ({ emoji, text, onPress }) => (
   </TouchableOpacity>
 );
 
-const TrustStrip = ({ navigation }) => (
-  <View style={styles.trust}>
-    <TrustItem emoji="🔒" text="Dashboard" onPress={() => navigation.navigate('Dashboard')} />
-    <TrustItem emoji="🚚" text="Secure Payments" onPress={() => navigation.navigate('Payments')} />
-    <TrustItem
-      emoji="🙎🏻‍♂️"
-      text="User Account" onPress={() => navigation.navigate('UserAccount')}
-    />
-    <TrustItem emoji="⚙️" text="Profile Settings" onPress={() => navigation.navigate('ProfileSettings')} />
-  </View>
-);
+const TrustStrip = ({ navigation }) => {
+  // Calculate bottom padding for Android gesture navigation
+  const getBottomPadding = () => {
+    if (Platform.OS === 'android') {
+      // Android 15+ typically has gesture navigation bar (~34-48px)
+      // Add extra padding to ensure icons are fully visible
+      return Platform.Version >= 29 ? 20 : 16; // Android 10+ (API 29+) has gesture nav
+    }
+    return 0; // iOS handles this with SafeAreaView
+  };
+
+  return (
+    <View style={[styles.trust, { paddingBottom: getBottomPadding() }]}>
+      <TrustItem emoji="🔒" text="Dashboard" onPress={() => navigation.navigate('Dashboard')} />
+      <TrustItem emoji="🚚" text="Secure Payments" onPress={() => navigation.navigate('Payments')} />
+      <TrustItem
+        emoji="🙎🏻‍♂️"
+        text="User Account" onPress={() => navigation.navigate('UserAccount')}
+      />
+      <TrustItem emoji="⚙️" text="Profile Settings" onPress={() => navigation.navigate('ProfileSettings')} />
+    </View>
+  );
+};
 
 // ------------------------------
 // HomeScreen
@@ -608,6 +620,7 @@ useEffect(() => {
       <StatusBar barStyle={Platform.OS === 'ios' ? 'dark-content' : 'light-content'} />
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={Platform.OS === 'android' ? styles.scrollContentAndroid : undefined}
       >
         <Header
           onSearchPress={openSearchModal}
@@ -837,10 +850,20 @@ menuIcon: {
   lowStock: { color: '#EF4444', fontSize: 10, fontWeight: '700' },
   discountTag: { color: '#EF4444', fontSize: 12, fontWeight: '700', marginTop: 2 },
 
-  trust: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#1A1B1E', paddingVertical: 16, marginTop: 12 },
-  trustItem: { alignItems: 'center' },
+  trust: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-around', 
+    backgroundColor: '#1A1B1E', 
+    paddingTop: 16, 
+    paddingBottom: Platform.OS === 'android' ? 28 : 16, // Extra padding for Android gesture navigation (Android 15+)
+    marginTop: 12,
+  },
+  trustItem: { alignItems: 'center', paddingVertical: 4 },
   trustEmoji: { fontSize: 24 },
   trustText: { color: '#fff', fontSize: 12, marginTop: 4 },
+  scrollContentAndroid: {
+    paddingBottom: Platform.OS === 'android' ? 10 : 0, // Extra space at bottom for Android
+  },
 
   skeletonBanner: { width, height: Math.round(width * 0.45), backgroundColor: '#333', marginBottom: 8 },
   skeletonRow: { height: 100, backgroundColor: '#333', marginVertical: 6, marginHorizontal: 12, borderRadius: 12 },
