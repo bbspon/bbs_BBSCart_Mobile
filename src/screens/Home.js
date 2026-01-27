@@ -35,16 +35,7 @@ const BANNERS = [
   { id: 'b3', image: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?q=80&w=1600&auto=format&fit=crop', deeplink: 'Category:Groceries' },
 ];
 
-const CATEGORIES = [
-  { id: 'c1', name: 'Electronics', icon: 'https://th.bing.com/th/id/R.b0dd3b2732fd9d9026e62ea6348d1906?rik=oO3zAnIuYJImLQ&riu=http%3a%2f%2fwww.pngall.com%2fwp-content%2fuploads%2f1%2fElectronic-High-Quality-PNG.png&ehk=nYk3W%2fnX%2fXcg3DaTdCUG9z0LO%2fMyXKvYLaH7Cq35v4w%3d&risl=1&pid=ImgRaw&r=0', deeplink: 'Category:Electronics' },
-  { id: 'c2', name: 'Fashion', icon: 'https://th.bing.com/th/id/R.c4e22610ee0aaf83b50e49587feec8e4?rik=Whq8caANBurccQ&riu=http%3a%2f%2fpluspng.com%2fimg-png%2fyoung-woman-in-fashion-flying-fabric-dress-png-image-1500.png&ehk=3YschV9x2rIebUH%2bGZ9Yc%2bpXZUhXF%2bznfWPCqFr1ANQ%3d&risl=&pid=ImgRaw&r=0' },
-  { id: 'c3', name: 'Groceries', icon: 'https://www.pngall.com/wp-content/uploads/4/Grocery-PNG-Picture.png' },
-  { id: 'c4', name: 'Beauty', icon: 'https://static.vecteezy.com/system/resources/thumbnails/044/245/390/small_2x/smiling-beauty-expert-holding-makeup-brushes-on-transparent-background-png.png' },
-  { id: 'c5', name: 'Furniture', icon: 'https://www.pngarts.com/files/7/Chair-Furniture-PNG-Transparent-Image.png' },
-  { id: 'c6', name: 'Toys', icon: 'https://th.bing.com/th/id/R.b5b53b9a8482e44b5c508340438e1431?rik=eWJgNqIP4Ic1ww&riu=http%3a%2f%2fpluspng.com%2fimg-png%2fbaby-toys-png-borders-toy-transparent-background-1000.png&ehk=p6KterfU5xqxhqpsO3J4xVWQyrSn7KCNFDxhq4a%2bLCc%3d&risl=&pid=ImgRaw&r=0' },
-  { id: 'c7', name: 'Sports', icon: 'https://freepngimg.com/thumb/sports_equipment/22530-7-sport.png' },
-  { id: 'c8', name: 'Health', icon: 'https://th.bing.com/th/id/R.0d12395130d7be381f5e45e82ef3cb26?rik=NJg5KIE4H8BtLQ&riu=http%3a%2f%2fwww.pngall.com%2fwp-content%2fuploads%2f2016%2f06%2fHealth-PNG-Image.png&ehk=2m2sPsS8Q00VoZpgr44hP2Rv6nEr5T%2fk7umGk4hi84Y%3d&risl=&pid=ImgRaw&r=0' },
-];
+// Categories are now loaded from API and shown with relevant images in the slider
 
 // PRODUCTS_TRENDING is now fetched dynamically from API as "All Products"
 
@@ -205,21 +196,30 @@ const HeroCarousel = ({ banners, onBannerPress }) => {
 // ------------------------------
 // Categories
 // ------------------------------
-const CategoryStrip = ({ categories, onPress }) => (
+const CategoryStrip = ({ categories, onPress, loading }) => (
   <View style={styles.catWrap}>
-    <FlatList
-      data={categories}
-      keyExtractor={(it) => it.id}
-      renderItem={({ item }) => (
-        <TouchableOpacity style={styles.catItem} onPress={() => onPress?.(item)}>
-          <Image source={{ uri: item.icon }} style={styles.catIcon} />
-          <Text style={styles.catName} numberOfLines={1}>{item.name}</Text>
-        </TouchableOpacity>
-      )}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-
-    />
+    {loading ? (
+      <View style={styles.catLoading}>
+        <ActivityIndicator size="small" color="#EAB308" />
+        <Text style={styles.catLoadingText}>Loading categories…</Text>
+      </View>
+    ) : (
+      <FlatList
+        data={categories || []}
+        keyExtractor={(it) => String(it.id ?? it._id ?? '')}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.catItem} onPress={() => onPress?.(item)}>
+            <Image
+              source={{ uri: item.icon || 'https://via.placeholder.com/120?text=' + encodeURIComponent((item.name || '').slice(0, 1)) }}
+              style={styles.catIcon}
+            />
+            <Text style={styles.catName} numberOfLines={1}>{item.name}</Text>
+          </TouchableOpacity>
+        )}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      />
+    )}
   </View>
 );
 
@@ -317,6 +317,8 @@ export default function HomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [sliderCategories, setSliderCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const searchTimeoutRef = useRef(null);
 
   const countdown = useMidnightCountdown();
@@ -344,12 +346,16 @@ useEffect(() => {
     if (!p) setShowDeliverTo(true);
   });
 }, []);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Fetch recommended products and all products on refresh
-    await Promise.all([fetchRecommendedProducts(), fetchAllProducts()]);
+    await Promise.all([fetchRecommendedProducts(), fetchAllProducts(), fetchCategories()]);
     setTimeout(() => setRefreshing(false), 800);
-  }, [fetchRecommendedProducts, fetchAllProducts]);
+  }, [fetchRecommendedProducts, fetchAllProducts, fetchCategories]);
 
   const navigate = (screen, params) => {
     if (navigation && navigation.navigate) navigation.navigate(screen, params);
@@ -514,6 +520,52 @@ useEffect(() => {
     }
   }, []);
 
+  // Fetch categories from API and enrich with relevant image (category image or first product image)
+  const fetchCategories = useCallback(async () => {
+    try {
+      setCategoriesLoading(true);
+      const res = await axios.get(`${API_BASE}/categories`);
+      const list = res.data || [];
+      const enriched = [];
+      for (const c of list) {
+        let iconUrl = null;
+        const raw = c.image || c.icon || c.category_img || c.img;
+        if (raw) {
+          const s = String(raw).trim();
+          if (/^https?:\/\//i.test(s)) iconUrl = s;
+          else if (STATIC_PREFIXES.some((pre) => s.startsWith(pre + "/"))) iconUrl = `https://bbscart.com${s}`;
+          else iconUrl = `${IMAGE_BASE}${encodeURIComponent(s)}`;
+        }
+        if (!iconUrl) {
+          try {
+            const subRes = await axios.get(`${API_BASE}/products/catalog/subcategories`, { params: { category_id: c._id } });
+            const subs = subRes.data?.items || subRes.data || [];
+            if (subs && subs[0]) {
+              const pincode = await AsyncStorage.getItem("deliveryPincode");
+              const prodRes = await axios.get(`${API_BASE}/products/public`, {
+                params: { subcategoryId: subs[0]._id, pincode, limit: 1 },
+              });
+              const prods = prodRes.data?.products || prodRes.data?.items || [];
+              if (prods && prods[0]) iconUrl = getImageUrl(prods[0]);
+            }
+          } catch (_) {}
+        }
+        enriched.push({
+          id: c._id,
+          _id: c._id,
+          name: c.name || "",
+          icon: iconUrl || `https://via.placeholder.com/120?text=${encodeURIComponent((c.name || "").slice(0, 1))}`,
+        });
+      }
+      setSliderCategories(enriched);
+    } catch (err) {
+      console.log("❌ CATEGORIES FETCH ERROR", err?.response?.data || err?.message);
+      setSliderCategories([]);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  }, []);
+
   // Search products and brands
   const searchProducts = useCallback(async (query) => {
     if (!query || query.trim().length === 0) {
@@ -642,7 +694,11 @@ useEffect(() => {
         />
 
         <HeroCarousel banners={BANNERS} onBannerPress={onBannerPress} />
-        <CategoryStrip categories={CATEGORIES} onPress={(c) => navigate('Products', { name: c.name })} />
+        <CategoryStrip
+          categories={sliderCategories}
+          loading={categoriesLoading}
+          onPress={(c) => navigate('Products', { name: c.name })}
+        />
         <Section title={`Deals of the Day  ⏱  ${countdown}`} rightLabel="View all" onRightPress={() => navigate('Products')}>
           {renderHorizontal(PRODUCTS_DEALS, (p) => <DealsCard key={p.id} item={p} onPress={onProductPress} />)}
         </Section>
@@ -825,8 +881,10 @@ menuIcon: {
   dotActive: { backgroundColor: '#fff' },
 
   catWrap: { paddingVertical: 12 },
+  catLoading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 8 },
+  catLoadingText: { color: '#fff', fontSize: 14 },
   catItem: { width: 84, alignItems: 'center', marginHorizontal: 6 },
-  catIcon: { width: 60, height: 60, marginBottom: 4, alignItems: 'center', justifyContent: 'center' },
+  catIcon: { width: 60, height: 60, marginBottom: 4, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
   catName: { color: '#fff', fontSize: 12, textAlign: 'center' },
 
   section: { marginVertical: 12 },
