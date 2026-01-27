@@ -211,17 +211,6 @@ const ProductDetails = () => {
             <Text style={styles.title} numberOfLines={2}>
               {product.name}
             </Text>
-            <TouchableOpacity
-              style={styles.wishlistIcon}
-              onPress={handleWishlistToggle}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={isWishlisted ? 'heart' : 'heart-outline'}
-                size={28}
-                color={isWishlisted ? '#e91e63' : '#666'}
-              />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.priceRow}>
@@ -327,20 +316,8 @@ const styles = StyleSheet.create({
   title: { 
     fontSize: 20, 
     fontWeight: '700',
-    flex: 1,
-    marginRight: 12,
     color: '#333',
     lineHeight: 26,
-  },
-  wishlistIcon: {
-    padding: 8,
-    marginTop: 0,
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 44,
-    minHeight: 44,
   },
   priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   price: { fontSize: 24, fontWeight: '700', color: '#96B416' },

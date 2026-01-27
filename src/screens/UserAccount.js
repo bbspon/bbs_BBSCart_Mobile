@@ -178,11 +178,7 @@ const handleLogout = async () => {
       {/* Support Section */}
       <View style={styles.menuSection}>
         <Text style={styles.sectionTitle}>Support</Text>
-        <MenuItem
-          emoji="❓"
-          text="Help Center"
-          onPress={() => handleNavigation("Help")}
-        />
+   
         <MenuItem
           emoji="📜"
           text="Terms Of Use"
