@@ -12,7 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -51,17 +51,24 @@ const ProductListings = () => {
     addToWishlist,
     removeFromWishlist,
   } = useWishlist();
+  
+  const navigation = useNavigation();
+  const route = useRoute();
+  
+  // Get category name from route params (passed from Home screen slider)
+  const initialCategoryName = route.params?.name || 'All';
+  
   const [selectedQuantity, setSelectedQuantity] = useState({});
   const [productQuantities, setProductQuantities] = useState({});
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState(initialCategoryName);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [allProductsLoaded, setAllProductsLoaded] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [categories, setCategories] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState(['All']);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
 
-  const navigation = useNavigation();
   const scrollX = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef(null);
 
@@ -140,10 +147,19 @@ const ProductListings = () => {
     fetchCategories();
   }, []);
 
-  // Fetch products when category changes
+  // Update selectedCategory when route params change (when navigating from Home slider)
   useEffect(() => {
-    loadProducts();
-  }, [selectedCategory]);
+    if (route.params?.name) {
+      setSelectedCategory(route.params.name);
+    }
+  }, [route.params?.name]);
+
+  // Fetch products when category changes and categories are loaded
+  useEffect(() => {
+    if (categoriesLoaded || selectedCategory === 'All') {
+      loadProducts();
+    }
+  }, [selectedCategory, categoriesLoaded, categories]);
 
   const fetchCategories = async () => {
     try {
@@ -153,9 +169,11 @@ const ProductListings = () => {
       // Extract category names for the picker
       const categoryNames = ['All', ...categoriesList.map((cat) => cat.name)];
       setCategoryOptions(categoryNames);
+      setCategoriesLoaded(true);
     } catch (err) {
       console.log('❌ CATEGORY API ERROR', err);
       setCategories([]);
+      setCategoriesLoaded(true);
     }
   };
 

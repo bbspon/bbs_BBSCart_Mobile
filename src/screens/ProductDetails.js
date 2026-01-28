@@ -19,12 +19,41 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 const { width } = Dimensions.get('window');
 
 const API_BASE = 'https://bbscart.com';
-const UPLOADS = '/uploads';
+const IMAGE_BASE = 'https://bbscart.com/uploads/';
+const STATIC_PREFIXES = ['/uploads', '/uploads-bbscart'];
+const DEFAULT_PRODUCT_IMAGE = 'https://via.placeholder.com/400x400?text=No+Image';
 
-const normalizeImg = (img) => {
-  if (!img) return null;
-  if (img.startsWith('http')) return img;
-  return `${API_BASE}${UPLOADS}/${encodeURIComponent(img)}`;
+const norm = (u) => {
+  if (!u) return '';
+  const s = String(u).trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  if (STATIC_PREFIXES.some((pre) => s.startsWith(pre + '/'))) {
+    return `https://bbscart.com${s}`;
+  }
+  return `${IMAGE_BASE}${encodeURIComponent(s)}`;
+};
+
+const buildGalleryFromProduct = (p) => {
+  const urls = [];
+  const addAll = (val) => {
+    if (!val) return;
+    const arr = Array.isArray(val) ? val : [val];
+    arr.forEach((x) => {
+      const s = String(x).trim();
+      if (!s) return;
+      const parts = s.includes('|') ? s.split('|').map((t) => t.trim()).filter(Boolean) : [s];
+      parts.forEach((part) => urls.push(norm(part)));
+    });
+  };
+  if (p.product_img_url) urls.push(norm(String(p.product_img_url).trim()));
+  if (Array.isArray(p.gallery_img_urls)) {
+    p.gallery_img_urls.forEach((u) => u && urls.push(norm(String(u).trim())));
+  }
+  addAll(p.product_img);
+  addAll(p.gallery_imgs);
+  addAll(p.product_img2);
+  if (p.image) urls.push(norm(String(p.image)));
+  return [...new Set(urls)].filter(Boolean);
 };
 
 const ProductDetails = () => {
@@ -37,7 +66,7 @@ const ProductDetails = () => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
-  const galleryRef = useRef(null);
+  const [mainImageError, setMainImageError] = useState(false);
 
   // Refresh wishlist when screen comes into focus
   useFocusEffect(
@@ -58,14 +87,10 @@ const ProductDetails = () => {
         );
 
         const p = res.data;
-
-        const gallery = [
-          ...(Array.isArray(p.gallery_imgs)
-            ? p.gallery_imgs.map(normalizeImg)
-            : []),
-          normalizeImg(p.product_img),
-          normalizeImg(p.product_img2),
-        ].filter(Boolean);
+        let gallery = buildGalleryFromProduct(p);
+        if (gallery.length === 0) {
+          gallery = [DEFAULT_PRODUCT_IMAGE];
+        }
 
         setProduct({
           ...p,
@@ -79,6 +104,10 @@ const ProductDetails = () => {
       }
     })();
   }, [productId]);
+
+  useEffect(() => {
+    setMainImageError(false);
+  }, [activeImg, product?._id]);
 
   // Check if product is in wishlist
   const isWishlisted = wishlistItems.some((wItem) => {
@@ -153,53 +182,56 @@ const ProductDetails = () => {
       ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
       : 0;
 
+  const gallery = product._gallery || [];
+  const mainImageUri = mainImageError
+    ? DEFAULT_PRODUCT_IMAGE
+    : (gallery[activeImg] || DEFAULT_PRODUCT_IMAGE);
+
+  const thumbUrls = [
+    gallery[0] || DEFAULT_PRODUCT_IMAGE,
+    gallery[1] || DEFAULT_PRODUCT_IMAGE,
+    gallery[2] || DEFAULT_PRODUCT_IMAGE,
+  ];
+
   return (
     <View style={{ flex: 1 }}>
       <ScrollView>
-        {/* IMAGE GALLERY */}
+        {/* MAIN IMAGE (one large image on top, Thiaworld-style) */}
         <View style={styles.imageGalleryContainer}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            ref={galleryRef}
-            showsHorizontalScrollIndicator={false}
-            onScroll={(e) =>
-              setActiveImg(Math.round(e.nativeEvent.contentOffset.x / width))
-            }
-          >
-            {product._gallery.map((img, i) => (
-              <Image key={i} source={{ uri: img }} style={styles.image} />
-            ))}
-          </ScrollView>
-          {/* Floating Wishlist Button */}
-          <TouchableOpacity
-            style={styles.floatingWishlistBtn}
-            onPress={handleWishlistToggle}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={isWishlisted ? 'heart' : 'heart-outline'}
-              size={26}
-              color={isWishlisted ? '#e91e63' : '#fff'}
-            />
-          </TouchableOpacity>
+          <Image
+            source={{ uri: mainImageUri }}
+            style={styles.mainImage}
+            resizeMode="contain"
+            onError={() => setMainImageError(true)}
+          />
+          {/* Floating Wishlist - aligned top-right over image */}
+          <View style={styles.wishlistOverlay} pointerEvents="box-none">
+            <TouchableOpacity
+              style={styles.floatingWishlistBtn}
+              onPress={handleWishlistToggle}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={isWishlisted ? 'heart' : 'heart-outline'}
+                size={24}
+                color={isWishlisted ? '#e91e63' : '#fff'}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* THUMBNAILS */}
+        {/* THREE THUMBNAILS BELOW (dummy/default if image not there) */}
         <View style={styles.thumbRow}>
-          {product._gallery.map((img, i) => (
+          {thumbUrls.map((uri, i) => (
             <TouchableOpacity
               key={i}
-              onPress={() =>
-                galleryRef.current.scrollTo({ x: i * width })
-              }
+              style={[styles.thumbWrap, activeImg === i && styles.thumbActiveWrap]}
+              onPress={() => setActiveImg(Math.min(i, gallery.length - 1))}
+              activeOpacity={0.8}
             >
               <Image
-                source={{ uri: img }}
-                style={[
-                  styles.thumb,
-                  activeImg === i && styles.thumbActive,
-                ]}
+                source={{ uri }}
+                style={styles.thumb}
               />
             </TouchableOpacity>
           ))}
@@ -276,35 +308,64 @@ export default ProductDetails;
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   imageGalleryContainer: {
+    width,
+    height: 280,
+    backgroundColor: '#f5f5f5',
     position: 'relative',
   },
-  image: { width, height: 280, resizeMode: 'contain' },
-  floatingWishlistBtn: {
+  mainImage: {
+    width,
+    height: 280,
+    backgroundColor: '#f5f5f5',
+  },
+  wishlistOverlay: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 12,
+    paddingRight: 12,
+  },
+  floatingWishlistBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 24,
-    width: 48,
-    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
   },
-  thumbRow: { flexDirection: 'row', padding: 10 },
-  thumb: {
-    width: 60,
-    height: 60,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
+  thumbRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 8,
   },
-  thumbActive: { borderColor: '#96B416', borderWidth: 2 },
+  thumbWrap: {
+    flex: 1,
+    aspectRatio: 1,
+    maxHeight: 80,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  thumbActiveWrap: {
+    borderColor: '#96B416',
+    borderWidth: 2,
+  },
+  thumb: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f5f5f5',
+  },
   card: { padding: 16, backgroundColor: '#fff' },
   titleContainer: {
     flexDirection: 'row',

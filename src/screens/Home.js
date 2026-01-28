@@ -269,11 +269,11 @@ const DealsCard = ({ item, onPress }) => (
 );
 
 // ------------------------------
-// Trust Strip
+// Trust Strip (bottom nav with vector icons)
 // ------------------------------
-const TrustItem = ({ emoji, text, onPress }) => (
+const TrustItem = ({ icon, text, onPress }) => (
   <TouchableOpacity style={styles.trustItem} onPress={onPress} activeOpacity={0.7}>
-    <Text style={styles.trustEmoji}>{emoji}</Text>
+    <Icon name={icon} size={24} color="#fff" style={styles.trustIcon} />
     <Text style={styles.trustText}>{text}</Text>
   </TouchableOpacity>
 );
@@ -291,13 +291,10 @@ const TrustStrip = ({ navigation }) => {
 
   return (
     <View style={[styles.trust, { paddingBottom: getBottomPadding() }]}>
-      <TrustItem emoji="🔒" text="Dashboard" onPress={() => navigation.navigate('Dashboard')} />
-      <TrustItem emoji="🚚" text="Secure Payments" onPress={() => navigation.navigate('Payments')} />
-      <TrustItem
-        emoji="🙎🏻‍♂️"
-        text="User Account" onPress={() => navigation.navigate('UserAccount')}
-      />
-      <TrustItem emoji="⚙️" text="Profile Settings" onPress={() => navigation.navigate('ProfileSettings')} />
+      <TrustItem icon="grid-outline" text="Dashboard" onPress={() => navigation.navigate('Dashboard')} />
+      <TrustItem icon="shield-checkmark-outline" text="Secure Payments" onPress={() => navigation.navigate('Payments')} />
+      <TrustItem icon="person-outline" text="User Account" onPress={() => navigation.navigate('UserAccount')} />
+      <TrustItem icon="settings-outline" text="Profile Settings" onPress={() => navigation.navigate('ProfileSettings')} />
     </View>
   );
 };
@@ -917,7 +914,7 @@ menuIcon: {
     marginTop: 12,
   },
   trustItem: { alignItems: 'center', paddingVertical: 4 },
-  trustEmoji: { fontSize: 24 },
+  trustIcon: { marginBottom: 2 },
   trustText: { color: '#fff', fontSize: 12, marginTop: 4 },
   scrollContentAndroid: {
     paddingBottom: Platform.OS === 'android' ? 10 : 0, // Extra space at bottom for Android
